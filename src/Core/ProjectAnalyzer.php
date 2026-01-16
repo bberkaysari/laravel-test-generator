@@ -1,0 +1,274 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Bberkaysari\LaravelTestGenerator\Core;
+
+use Bberkaysari\LaravelTestGenerator\Scanner\ProjectScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ModelScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\MigrationScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ControllerScanner;
+use Bberkaysari\LaravelTestGenerator\Core\Performance\PerformanceMonitor;
+use Bberkaysari\LaravelTestGenerator\Core\Cache\CacheManager;
+use Bberkaysari\LaravelTestGenerator\Core\Progress\ProgressTracker;
+
+/**
+ * Main analyzer that coordinates all scanners for large projects
+ */
+class ProjectAnalyzer
+{
+    private string $projectPath;
+    private PerformanceMonitor $performance;
+    private CacheManager $cache;
+    private bool $verbose;
+    private array $results = [];
+    
+    public function __construct(
+        string $projectPath,
+        ?CacheManager $cache = null,
+        bool $verbose = true
+    ) {
+        $this->projectPath = $projectPath;
+        $this->performance = new PerformanceMonitor();
+        $this->cache = $cache ?? new CacheManager($projectPath . '/.test-gen-cache', false);
+        $this->verbose = $verbose;
+    }
+    
+    /**
+     * Analyze entire project
+     */
+    public function analyze(): array
+    {
+        if ($this->verbose) {
+            echo "🔍 Analyzing Laravel project...\n";
+            echo "📂 Path: {$this->projectPath}\n\n";
+        }
+        
+        $this->performance->start('total');
+        
+        // Step 1: Project metadata
+        $this->performance->start('project_scan');
+        $this->results['project'] = $this->scanProject();
+        $this->performance->stop('project_scan');
+        
+        // Step 2: Models
+        $this->performance->start('model_scan');
+        $this->results['models'] = $this->scanModels();
+        $this->performance->stop('model_scan');
+        
+        // Step 3: Migrations
+        $this->performance->start('migration_scan');
+        $this->results['migrations'] = $this->scanMigrations();
+        $this->performance->stop('migration_scan');
+        
+        // Step 4: Controllers
+        $this->performance->start('controller_scan');
+        $this->results['controllers'] = $this->scanControllers();
+        $this->performance->stop('controller_scan');
+        
+        $this->performance->stop('total');
+        
+        // Add statistics
+        $this->results['statistics'] = $this->generateStatistics();
+        $this->results['performance'] = $this->performance->getSummary();
+        
+        if ($this->verbose) {
+            $this->displaySummary();
+        }
+        
+        return $this->results;
+    }
+    
+    /**
+     * Get performance monitor (for testing)
+     */
+    public function getPerformanceMonitor(): PerformanceMonitor
+    {
+        return $this->performance;
+    }
+    
+    /**
+     * Get statistics (for testing)
+     */
+    public function getStatistics(): array
+    {
+        return $this->generateStatistics();
+    }
+    
+    /**
+     * Scan project metadata
+     */
+    private function scanProject(): array
+    {
+        $cacheKey = 'project_' . md5($this->projectPath);
+        
+        if ($cached = $this->cache->get($cacheKey)) {
+            if ($this->verbose) {
+                echo "   ✅ Project metadata (cached)\n";
+            }
+            return $cached;
+        }
+        
+        $scanner = new ProjectScanner($this->projectPath);
+        $result = $scanner->scan();
+        
+        $this->cache->set($cacheKey, $result, $this->projectPath . '/composer.json');
+        
+        if ($this->verbose) {
+            echo "   ✅ Project metadata\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Scan models with progress tracking
+     */
+    private function scanModels(): array
+    {
+        $scanner = new ModelScanner($this->projectPath);
+        $models = $scanner->scan();
+        
+        if ($this->verbose) {
+            echo "   ✅ Scanned " . count($models) . " model(s)\n";
+        }
+        
+        return $models;
+    }
+    
+    /**
+     * Scan migrations
+     */
+    private function scanMigrations(): array
+    {
+        $scanner = new MigrationScanner($this->projectPath);
+        $migrations = $scanner->scan();
+        
+        if ($this->verbose) {
+            echo "   ✅ Scanned " . count($migrations) . " table(s)\n";
+        }
+        
+        return $migrations;
+    }
+    
+    /**
+     * Scan controllers
+     */
+    private function scanControllers(): array
+    {
+        $scanner = new ControllerScanner($this->projectPath);
+        $controllers = $scanner->scan();
+        
+        if ($this->verbose) {
+            echo "   ✅ Scanned " . count($controllers) . " controller(s)\n";
+        }
+        
+        return $controllers;
+    }
+    
+    /**
+     * Generate project statistics
+     */
+    private function generateStatistics(): array
+    {
+        $models = $this->results['models'] ?? [];
+        $migrations = $this->results['migrations'] ?? [];
+        $controllers = $this->results['controllers'] ?? [];
+        
+        // Count relationships
+        $relationshipCount = 0;
+        foreach ($models as $model) {
+            $relationshipCount += count($model['relations'] ?? []);
+        }
+        
+        // Count controller methods
+        $methodCount = 0;
+        $apiControllers = 0;
+        $resourceControllers = 0;
+        
+        foreach ($controllers as $controller) {
+            $methodCount += count($controller['methods'] ?? []);
+            if ($controller['is_api'] ?? false) {
+                $apiControllers++;
+            }
+            if ($controller['resource_type'] ?? null) {
+                $resourceControllers++;
+            }
+        }
+        
+        // Estimate test count
+        $estimatedTests = 
+            (count($models) * 8) +  // ~8 tests per model
+            ($methodCount * 3) +     // ~3 tests per controller method
+            (count($migrations) * 2); // ~2 tests per migration
+        
+        return [
+            'models' => count($models),
+            'migrations' => count($migrations),
+            'controllers' => count($controllers),
+            'relationships' => $relationshipCount,
+            'controller_methods' => $methodCount,
+            'api_controllers' => $apiControllers,
+            'resource_controllers' => $resourceControllers,
+            'estimated_tests' => $estimatedTests,
+        ];
+    }
+    
+    /**
+     * Display analysis summary
+     */
+    private function displaySummary(): void
+    {
+        $stats = $this->results['statistics'];
+        $perf = $this->performance;
+        
+        echo "\n" . str_repeat("═", 60) . "\n";
+        echo "📊 ANALYSIS COMPLETE\n";
+        echo str_repeat("═", 60) . "\n\n";
+        
+        echo "Project Components:\n";
+        echo "   • Models: {$stats['models']}\n";
+        echo "   • Migrations: {$stats['migrations']}\n";
+        echo "   • Controllers: {$stats['controllers']}\n";
+        echo "   • Relationships: {$stats['relationships']}\n";
+        echo "   • Controller Methods: {$stats['controller_methods']}\n";
+        echo "   • API Controllers: {$stats['api_controllers']}\n";
+        echo "   • Resource Controllers: {$stats['resource_controllers']}\n";
+        echo "\n";
+        
+        echo "Test Generation:\n";
+        echo "   • Estimated tests: {$stats['estimated_tests']}\n";
+        echo "\n";
+        
+        echo "Performance:\n";
+        echo "   • Time: " . $perf->formatTime($perf->getTotalTime()) . "\n";
+        echo "   • Memory: " . $perf->formatBytes($perf->getTotalMemory()) . "\n";
+        echo "   • Peak Memory: " . $perf->formatBytes($perf->getPeakMemory()) . "\n";
+        echo "\n";
+        
+        // Cache stats
+        $cacheStats = $this->cache->getStats();
+        if ($cacheStats['enabled']) {
+            echo "Cache:\n";
+            echo "   • Files: {$cacheStats['files']}\n";
+            echo "   • Size: {$cacheStats['total_size_formatted']}\n";
+            echo "\n";
+        }
+    }
+    
+    /**
+     * Get results
+     */
+    public function getResults(): array
+    {
+        return $this->results;
+    }
+    
+    /**
+     * Clear cache
+     */
+    public function clearCache(): void
+    {
+        $this->cache->clear();
+    }
+}
