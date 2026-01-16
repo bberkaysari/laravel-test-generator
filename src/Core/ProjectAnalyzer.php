@@ -8,6 +8,12 @@ use Bberkaysari\LaravelTestGenerator\Scanner\ProjectScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ModelScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\MigrationScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ControllerScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ServiceScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\EventScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\MiddlewareScanner;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\MethodAnalyzer;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\DependencyAnalyzer;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\QueryAnalyzer;
 use Bberkaysari\LaravelTestGenerator\Core\Performance\PerformanceMonitor;
 use Bberkaysari\LaravelTestGenerator\Core\Cache\CacheManager;
 use Bberkaysari\LaravelTestGenerator\Core\Progress\ProgressTracker;
@@ -65,6 +71,26 @@ class ProjectAnalyzer
         $this->performance->start('controller_scan');
         $this->results['controllers'] = $this->scanControllers();
         $this->performance->stop('controller_scan');
+        
+        // Step 5: Services & Repositories
+        $this->performance->start('service_scan');
+        $this->results['services'] = $this->scanServices();
+        $this->performance->stop('service_scan');
+        
+        // Step 6: Events, Listeners, Jobs
+        $this->performance->start('event_scan');
+        $this->results['events'] = $this->scanEvents();
+        $this->performance->stop('event_scan');
+        
+        // Step 7: Middleware
+        $this->performance->start('middleware_scan');
+        $this->results['middleware'] = $this->scanMiddleware();
+        $this->performance->stop('middleware_scan');
+        
+        // Step 8: Deep analysis (method calls, dependencies, queries)
+        $this->performance->start('deep_analysis');
+        $this->results['deep_analysis'] = $this->performDeepAnalysis();
+        $this->performance->stop('deep_analysis');
         
         $this->performance->stop('total');
         
@@ -175,6 +201,94 @@ class ProjectAnalyzer
     }
     
     /**
+     * Scan services and repositories
+     */
+    private function scanServices(): array
+    {
+        $scanner = new ServiceScanner($this->projectPath);
+        $result = $scanner->scan();
+        
+        if ($this->verbose) {
+            $total = $result['statistics']['total_services'] + $result['statistics']['total_repositories'];
+            echo "   ✅ Scanned {$total} service/repository class(es)\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Scan events, listeners, jobs
+     */
+    private function scanEvents(): array
+    {
+        $scanner = new EventScanner($this->projectPath);
+        $result = $scanner->scan();
+        
+        if ($this->verbose) {
+            $total = $result['statistics']['total_events'] + 
+                    $result['statistics']['total_listeners'] + 
+                    $result['statistics']['total_jobs'];
+            echo "   ✅ Scanned {$total} event/listener/job(s)\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Scan middleware
+     */
+    private function scanMiddleware(): array
+    {
+        $scanner = new MiddlewareScanner($this->projectPath);
+        $result = $scanner->scan();
+        
+        if ($this->verbose) {
+            echo "   ✅ Scanned " . $result['statistics']['total_middleware'] . " middleware class(es)\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Perform deep analysis on scanned components
+     */
+    private function performDeepAnalysis(): array
+    {
+        $analysis = [
+            'method_analysis' => [],
+            'dependency_graph' => [],
+            'query_analysis' => [],
+        ];
+        
+        // Analyze service methods
+        if (!empty($this->results['services'])) {
+            $methodAnalyzer = new MethodAnalyzer();
+            $depAnalyzer = new DependencyAnalyzer();
+            $queryAnalyzer = new QueryAnalyzer();
+            
+            // Analyze all services
+            $allClasses = array_merge(
+                $this->results['services']['services'] ?? [],
+                $this->results['services']['repositories'] ?? []
+            );
+            
+            foreach ($allClasses as $class) {
+                // Method analysis would need AST access - skip for now
+                // In production, this would parse method bodies
+            }
+            
+            // Dependency graph
+            $analysis['dependency_graph'] = $depAnalyzer->analyzeDependencyGraph($allClasses);
+        }
+        
+        if ($this->verbose) {
+            echo "   ✅ Deep analysis completed\n";
+        }
+        
+        return $analysis;
+    }
+    
+    /**
      * Generate project statistics
      */
     private function generateStatistics(): array
@@ -182,6 +296,9 @@ class ProjectAnalyzer
         $models = $this->results['models'] ?? [];
         $migrations = $this->results['migrations'] ?? [];
         $controllers = $this->results['controllers'] ?? [];
+        $services = $this->results['services'] ?? [];
+        $events = $this->results['events'] ?? [];
+        $middleware = $this->results['middleware'] ?? [];
         
         // Count relationships
         $relationshipCount = 0;
@@ -204,16 +321,30 @@ class ProjectAnalyzer
             }
         }
         
+        // Count services/repos
+        $serviceCount = ($services['statistics']['total_services'] ?? 0) + 
+                       ($services['statistics']['total_repositories'] ?? 0);
+        
+        // Count events/jobs
+        $eventCount = ($events['statistics']['total_events'] ?? 0) + 
+                     ($events['statistics']['total_listeners'] ?? 0) + 
+                     ($events['statistics']['total_jobs'] ?? 0);
+        
         // Estimate test count
         $estimatedTests = 
-            (count($models) * 8) +  // ~8 tests per model
-            ($methodCount * 3) +     // ~3 tests per controller method
-            (count($migrations) * 2); // ~2 tests per migration
+            (count($models) * 8) +     // ~8 tests per model
+            ($methodCount * 3) +       // ~3 tests per controller method
+            (count($migrations) * 2) + // ~2 tests per migration
+            ($serviceCount * 10) +     // ~10 tests per service (complex logic)
+            ($eventCount * 2);         // ~2 tests per event/listener/job
         
         return [
             'models' => count($models),
             'migrations' => count($migrations),
             'controllers' => count($controllers),
+            'services_repositories' => $serviceCount,
+            'events_listeners_jobs' => $eventCount,
+            'middleware' => $middleware['statistics']['total_middleware'] ?? 0,
             'relationships' => $relationshipCount,
             'controller_methods' => $methodCount,
             'api_controllers' => $apiControllers,

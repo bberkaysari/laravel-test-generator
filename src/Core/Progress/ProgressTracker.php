@@ -12,7 +12,7 @@ class ProgressTracker
     private int $total;
     private int $current = 0;
     private string $label;
-    private ?callable $callback = null;
+    private $callback = null;
     private bool $verbose = true;
     
     public function __construct(int $total, string $label = 'Processing', bool $verbose = true)
