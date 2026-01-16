@@ -88,6 +88,14 @@ class ProjectAnalyzer
     }
     
     /**
+     * Get cache manager
+     */
+    public function getCacheManager(): CacheManager
+    {
+        return $this->cache;
+    }
+    
+    /**
      * Get statistics (for testing)
      */
     public function getStatistics(): array

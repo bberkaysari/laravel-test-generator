@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use Bberkaysari\LaravelTestGenerator\Commands\GenerateTestsCommand;
+use Symfony\Component\Console\Application;
+
+$application = new Application('Laravel Test Generator', '0.2.0');
+$application->add(new GenerateTestsCommand());
+$application->setDefaultCommand('test:generate', true);
+$application->run();
