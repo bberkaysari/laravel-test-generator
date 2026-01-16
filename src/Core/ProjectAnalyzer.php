@@ -11,9 +11,12 @@ use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ControllerScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\ServiceScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\EventScanner;
 use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\MiddlewareScanner;
+use Bberkaysari\LaravelTestGenerator\Scanner\Scanners\FormRequestScanner;
 use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\MethodAnalyzer;
 use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\DependencyAnalyzer;
 use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\QueryAnalyzer;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\RouteAnalyzer;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\CoverageAnalyzer;
 use Bberkaysari\LaravelTestGenerator\Core\Performance\PerformanceMonitor;
 use Bberkaysari\LaravelTestGenerator\Core\Cache\CacheManager;
 use Bberkaysari\LaravelTestGenerator\Core\Progress\ProgressTracker;
@@ -91,6 +94,21 @@ class ProjectAnalyzer
         $this->performance->start('deep_analysis');
         $this->results['deep_analysis'] = $this->performDeepAnalysis();
         $this->performance->stop('deep_analysis');
+        
+        // Step 9: Routes
+        $this->performance->start('route_analysis');
+        $this->results['routes'] = $this->analyzeRoutes();
+        $this->performance->stop('route_analysis');
+        
+        // Step 10: Form Requests
+        $this->performance->start('form_request_scan');
+        $this->results['form_requests'] = $this->scanFormRequests();
+        $this->performance->stop('form_request_scan');
+        
+        // Step 11: Coverage Analysis
+        $this->performance->start('coverage_analysis');
+        $this->results['coverage'] = $this->analyzeCoverage();
+        $this->performance->stop('coverage_analysis');
         
         $this->performance->stop('total');
         
@@ -286,6 +304,58 @@ class ProjectAnalyzer
         }
         
         return $analysis;
+    }
+    
+    /**
+     * Analyze routes
+     */
+    private function analyzeRoutes(): array
+    {
+        $analyzer = new RouteAnalyzer($this->projectPath);
+        $result = $analyzer->analyze();
+        
+        if ($this->verbose) {
+            echo "   ✅ Analyzed " . $result['statistics']['total_routes'] . " route(s)\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Scan Form Requests
+     */
+    private function scanFormRequests(): array
+    {
+        $scanner = new FormRequestScanner($this->projectPath);
+        $result = $scanner->scan();
+        
+        if ($this->verbose) {
+            echo "   ✅ Scanned " . $result['statistics']['total_requests'] . " form request(s)\n";
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Analyze test coverage
+     */
+    private function analyzeCoverage(): array
+    {
+        $testDir = $this->projectPath . '/tests';
+        $analyzer = new CoverageAnalyzer($testDir);
+        
+        $coverage = $analyzer->analyze($this->results);
+        $gaps = $analyzer->getCoverageGaps($coverage);
+        
+        if ($this->verbose) {
+            $overallPercent = $coverage['overall']['overall_coverage_percent'] ?? 0;
+            echo "   ✅ Coverage: {$overallPercent}% ({$coverage['overall']['tested_components']}/{$coverage['overall']['total_components']} components)\n";
+        }
+        
+        return [
+            'analysis' => $coverage,
+            'gaps' => $gaps,
+        ];
     }
     
     /**
