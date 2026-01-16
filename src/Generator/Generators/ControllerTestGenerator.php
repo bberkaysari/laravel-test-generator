@@ -5,12 +5,24 @@ declare(strict_types=1);
 namespace Bberkaysari\LaravelTestGenerator\Generator\Generators;
 
 use Bberkaysari\LaravelTestGenerator\Generator\Contracts\GeneratorInterface;
+use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\RouteAnalyzer;
 
 /**
  * Generate comprehensive controller tests with HTTP method testing
  */
 class ControllerTestGenerator implements GeneratorInterface
 {
+    private ?RouteAnalyzer $routeAnalyzer = null;
+    private array $routes = [];
+    
+    public function __construct(?RouteAnalyzer $routeAnalyzer = null)
+    {
+        $this->routeAnalyzer = $routeAnalyzer;
+        if ($routeAnalyzer) {
+            $this->routes = $routeAnalyzer->getRoutes();
+        }
+    }
+    
     public function generate(array $data): string
     {
         $controller = $data;
@@ -76,15 +88,24 @@ class ControllerTestGenerator implements GeneratorInterface
         $hasValidation = $method['has_validation'] ?? false;
         $routeParams = $method['route_params'] ?? [];
         
+        // Find actual route for this controller method
+        $routeData = $this->findRouteForMethod($controller, $methodName);
+        
         $testName = "test_" . $this->convertToSnakeCase($methodName);
         $code = "    /**\n";
         $code .= "     * Test {$methodName} method\n";
+        if ($routeData) {
+            $code .= "     * Route: " . implode('|', $routeData['http_methods']) . " {$routeData['uri']}\n";
+        }
         $code .= "     */\n";
         $code .= "    public function {$testName}(): void\n";
         $code .= "    {\n";
         
         // Setup data if needed
-        if (!empty($routeParams) && $modelClass) {
+        if ($routeData && !empty($routeData['parameters']) && $modelClass) {
+            $var = lcfirst($modelClass);
+            $code .= "        \${$var} = {$modelClass}::factory()->create();\n\n";
+        } elseif (!empty($routeParams) && $modelClass) {
             $var = lcfirst($modelClass);
             $code .= "        \${$var} = {$modelClass}::factory()->create();\n\n";
         }
@@ -96,27 +117,112 @@ class ControllerTestGenerator implements GeneratorInterface
             $code .= "        ];\n\n";
         }
         
-        // Build route
-        $route = $this->buildRoute($methodName, $controller, $routeParams, $modelClass);
+        // Build route using actual route data
+        if ($routeData) {
+            $route = $this->buildRouteFromRouteData($routeData, $modelClass);
+            // Use actual HTTP method from route
+            $actualHttpMethod = strtolower($routeData['http_methods'][0]);
+        } else {
+            $route = $this->buildRoute($methodName, $controller, $routeParams, $modelClass);
+            $actualHttpMethod = $httpMethod;
+        }
         
         // Make request
         if ($hasValidation) {
-            $code .= "        \$response = \$this->{$httpMethod}({$route}, \$data);\n\n";
+            $code .= "        \$response = \$this->{$actualHttpMethod}({$route}, \$data);\n\n";
         } else {
-            $code .= "        \$response = \$this->{$httpMethod}({$route});\n\n";
+            $code .= "        \$response = \$this->{$actualHttpMethod}({$route});\n\n";
         }
         
         // Assertions
-        $code .= $this->generateAssertions($methodName, $httpMethod, $isApi);
+        $code .= $this->generateAssertions($methodName, $actualHttpMethod, $isApi);
         
         $code .= "    }\n\n";
         
         // Add validation test if method has validation
         if ($hasValidation) {
-            $code .= $this->generateValidationTest($methodName, $httpMethod, $route, $controller);
+            $code .= $this->generateValidationTest($methodName, $actualHttpMethod, $route, $controller);
+        }
+        
+        // Add middleware test if route has middleware
+        if ($routeData && !empty($routeData['middleware'])) {
+            $code .= $this->generateMiddlewareTest($methodName, $routeData, $route);
         }
         
         return $code;
+    }
+    
+    /**
+     * Find route data for specific controller method
+     */
+    private function findRouteForMethod(string $controller, string $methodName): ?array
+    {
+        $controllerName = class_basename($controller);
+        
+        foreach ($this->routes as $route) {
+            $routeController = $route['controller'] ?? null;
+            $routeMethod = $route['method'] ?? null;
+            
+            if ($routeController === $controllerName && $routeMethod === $methodName) {
+                return $route;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Build route string from RouteAnalyzer data
+     */
+    private function buildRouteFromRouteData(array $routeData, ?string $modelClass): string
+    {
+        $uri = $routeData['uri'];
+        $parameters = $routeData['parameters'] ?? [];
+        
+        if (empty($parameters)) {
+            return "'{$uri}'";
+        }
+        
+        // Build route with parameter replacements
+        $var = lcfirst($modelClass ?? 'model');
+        $parts = [];
+        $currentString = '';
+        
+        // Split by parameters
+        $pattern = '/\{([^}]+)\}/';
+        $lastPos = 0;
+        
+        preg_match_all($pattern, $uri, $matches, PREG_OFFSET_CAPTURE);
+        
+        foreach ($matches[0] as $index => $match) {
+            $fullMatch = $match[0];
+            $position = $match[1];
+            
+            // Add string before parameter
+            if ($position > $lastPos) {
+                $parts[] = "'" . substr($uri, $lastPos, $position - $lastPos);
+            }
+            
+            // Add parameter variable
+            $parts[] = "' . \${$var}->id . '";
+            
+            $lastPos = $position + strlen($fullMatch);
+        }
+        
+        // Add remaining string
+        if ($lastPos < strlen($uri)) {
+            $parts[] = substr($uri, $lastPos) . "'";
+        } else {
+            $parts[] = "'";
+        }
+        
+        $result = implode('', $parts);
+        
+        // Clean up
+        $result = str_replace("'' . ", '', $result);
+        $result = str_replace(" . ''", '', $result);
+        
+        return $result;
     }
     
     private function buildRoute(string $methodName, string $controller, array $routeParams, ?string $modelClass): string
@@ -195,6 +301,37 @@ class ControllerTestGenerator implements GeneratorInterface
         $code .= "        \$response = \$this->{$httpMethod}({$route}, []);\n\n";
         $code .= "        \$response->assertStatus(422);\n";
         $code .= "        \$response->assertJsonValidationErrors(['name', 'email']);\n";
+        $code .= "    }\n\n";
+        
+        return $code;
+    }
+    
+    /**
+     * Generate middleware test for route
+     */
+    private function generateMiddlewareTest(string $methodName, array $routeData, string $route): string
+    {
+        $testName = "test_" . $this->convertToSnakeCase($methodName) . "_middleware";
+        $middleware = $routeData['middleware'];
+        $middlewareList = implode(', ', $middleware);
+        
+        $code = "    /**\n";
+        $code .= "     * Test {$methodName} middleware: {$middlewareList}\n";
+        $code .= "     */\n";
+        $code .= "    public function {$testName}(): void\n";
+        $code .= "    {\n";
+        
+        // Check for auth middleware
+        if (in_array('auth', $middleware)) {
+            $httpMethod = strtolower($routeData['http_methods'][0]);
+            $code .= "        \$response = \$this->{$httpMethod}({$route});\n\n";
+            $code .= "        \$response->assertStatus(302);\n";
+            $code .= "        \$response->assertRedirect('/login');\n";
+        } else {
+            $code .= "        // Test middleware: {$middlewareList}\n";
+            $code .= "        \$this->assertTrue(true);\n";
+        }
+        
         $code .= "    }\n\n";
         
         return $code;

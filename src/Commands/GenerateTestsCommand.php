@@ -176,7 +176,14 @@ HELP
     
     private function generateControllerTests(array $results, string $projectPath, string $outputDir, bool $force, SymfonyStyle $io): int
     {
-        $generator = new ControllerTestGenerator();
+        // Pass RouteAnalyzer to generator
+        $routeAnalyzer = null;
+        if (!empty($results['routes'])) {
+            $routeAnalyzer = new \Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\RouteAnalyzer($projectPath);
+            $routeAnalyzer->analyze(); // Analyze routes before passing to generator
+        }
+        
+        $generator = new ControllerTestGenerator($routeAnalyzer);
         $generated = 0;
         
         $controllers = $results['controllers'] ?? [];
