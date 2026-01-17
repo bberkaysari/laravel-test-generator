@@ -239,21 +239,27 @@ HELP
         $generator = new \Bberkaysari\LaravelTestGenerator\Generator\Generators\ServiceTestGenerator();
         $generated = 0;
         
+        // Services result contains ['services' => [], 'repositories' => []]
+        $servicesData = $results['services'] ?? [];
         $services = array_merge(
-            $results['services'] ?? [],
-            $results['repositories'] ?? []
+            $servicesData['services'] ?? [],
+            $servicesData['repositories'] ?? []
         );
         
         if (empty($services)) {
-            $io->note('No services or repositories found to generate tests for');
-            return 0;
+            return 0; // Silently skip if no services
         }
         
         $progressBar = $io->createProgressBar(count($services));
         $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% - %message%');
         
         foreach ($services as $service) {
-            $serviceName = $service['name'];
+            $serviceName = $service['name'] ?? 'Unknown';
+            if ($serviceName === 'Unknown') {
+                $progressBar->advance();
+                continue;
+            }
+            
             $testName = str_replace(['Service', 'Repository'], ['ServiceTest', 'RepositoryTest'], $serviceName);
             $progressBar->setMessage("Generating {$testName}...");
             
