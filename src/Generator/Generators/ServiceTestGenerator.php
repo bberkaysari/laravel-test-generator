@@ -29,7 +29,7 @@ class ServiceTestGenerator implements GeneratorInterface
     private QueryAnalyzer $queryAnalyzer;
 
     public function __construct(
-        string $testDirectory,
+        string $testDirectory = 'tests/Unit',
         ?DependencyAnalyzer $depAnalyzer = null,
         ?MethodAnalyzer $methodAnalyzer = null,
         ?QueryAnalyzer $queryAnalyzer = null
