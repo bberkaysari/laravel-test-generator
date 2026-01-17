@@ -1,10 +1,11 @@
 # 🚀 Laravel Test Generator
 
+[![CI](https://github.com/bberkaysari/laravel-test-generator/workflows/CI/badge.svg)](https://github.com/bberkaysari/laravel-test-generator/actions)
 [![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen)](https://github.com/bberkaysari/laravel-test-generator)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%205-blue)](https://phpstan.org)
-[![PHP Version](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
+[![PHP Version](https://img.shields.io/badge/PHP-8.2%20|%208.3%20|%208.4-blue)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/Laravel-10%2B%20|%2011%2B-red)](https://laravel.com)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **Production-ready Laravel test generator with 85-90% automation without AI**
 
