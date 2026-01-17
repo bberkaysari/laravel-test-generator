@@ -3,12 +3,30 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../vendor/autoload.php';
+// Find autoloader (works both in development and when installed as dependency)
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php', // Development
+    __DIR__ . '/../../../autoload.php',  // Installed as dependency
+];
+
+$autoloaderFound = false;
+foreach ($autoloadPaths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    fwrite(STDERR, "Error: Could not find Composer autoloader.\n");
+    exit(1);
+}
 
 use Bberkaysari\LaravelTestGenerator\Commands\GenerateTestsCommand;
 use Symfony\Component\Console\Application;
 
-$application = new Application('Laravel Test Generator', '0.2.0');
+$application = new Application('Laravel Test Generator', '1.1.0');
 $application->add(new GenerateTestsCommand());
 $application->setDefaultCommand('test:generate', true);
 $application->run();
