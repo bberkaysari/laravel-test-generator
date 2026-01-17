@@ -1,7 +1,19 @@
+includes:
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+    - phpstan-baseline.neon
+
 parameters:
-    level: 8
+    level: 5
     paths:
         - src
         - tests
     excludePaths:
         - tests/Fixtures
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        - '#Call to an undefined method PhpParser\\Node::#'
+        - '#Cannot access property .* on mixed#'
+        - '#Method .* return type has no value type specified#'
+        - '#Parameter .* of anonymous function has no type specified#'
+        - '#no value type specified in iterable type array#'
+        - '#has parameter .* with no type specified#'

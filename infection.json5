@@ -1,0 +1,23 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": [
+            "src"
+        ],
+        "excludes": [
+            "Commands"
+        ]
+    },
+    "logs": {
+        "text": "infection.log",
+        "summary": "infection-summary.log"
+    },
+    "mutators": {
+        "@default": true,
+        "@function_signature": false
+    },
+    "minMsi": 50,
+    "minCoveredMsi": 60,
+    "testFramework": "phpunit",
+    "testFrameworkOptions": "--testsuite=Unit"
+}

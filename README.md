@@ -1,6 +1,7 @@
 # 🚀 Laravel Test Generator
 
-[![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](https://github.com/bberkaysari/laravel-test-generator)
+[![Tests](https://img.shields.io/badge/tests-145%20passing-brightgreen)](https://github.com/bberkaysari/laravel-test-generator)
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%205-blue)](https://phpstan.org)
 [![PHP Version](https://img.shields.io/badge/PHP-8.2%2B-blue)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-10%2B%20|%2011%2B-red)](https://laravel.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -306,6 +307,57 @@ composer cs-fix
 ```
 
 **Current Status:** ✅ 69 tests, 193 assertions, 100% passing
+
+## 🛠️ Development
+
+### Running Tests
+
+```bash
+# Run all tests
+composer test
+
+# Run tests with coverage (requires Xdebug or PCOV)
+composer test:coverage
+
+# Run mutation testing (requires Xdebug or PCOV)
+composer infection
+```
+
+### Code Quality Tools
+
+```bash
+# PHPStan static analysis (level 5)
+composer analyse
+
+# Run full CI suite locally
+composer ci
+```
+
+**Current Status:** ✅ 145 tests, 394 assertions, 100% passing
+
+### Installing Code Coverage Tools
+
+**For Xdebug:**
+```bash
+pecl install xdebug
+# Add to php.ini: zend_extension=xdebug.so
+# For PHP 8.0+: xdebug.mode=coverage
+```
+
+**For PCOV (faster):**
+```bash
+pecl install pcov
+# Add to php.ini: extension=pcov.so
+```
+
+## 🔒 CI/CD Pipeline
+
+This project includes a complete GitHub Actions workflow:
+
+- ✅ **Multi-PHP Testing**: Tests on PHP 8.2, 8.3, 8.4
+- ✅ **PHPStan Analysis**: Level 5 static analysis
+- ✅ **Code Coverage**: Codecov integration
+- ✅ **Mutation Testing**: Infection for test quality
 
 ## 🤝 Contributing
 

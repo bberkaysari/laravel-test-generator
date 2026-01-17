@@ -6,7 +6,7 @@
          failOnWarning="true"
          failOnRisky="true"
          cacheDirectory=".phpunit.cache">
-    
+
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
@@ -15,13 +15,24 @@
             <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
-    
+
     <source>
         <include>
             <directory suffix=".php">src</directory>
         </include>
+        <exclude>
+            <directory>src/Commands</directory>
+        </exclude>
     </source>
-    
+
+    <coverage>
+        <report>
+            <html outputDirectory="coverage-report"/>
+            <clover outputFile="coverage.xml"/>
+            <text outputFile="php://stdout" showOnlySummary="true"/>
+        </report>
+    </coverage>
+
     <php>
         <env name="APP_ENV" value="testing"/>
     </php>

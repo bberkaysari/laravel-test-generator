@@ -62,8 +62,9 @@ class ServiceTestGenerator implements GeneratorInterface
         return in_array($type, ['service', 'repository']);
     }
 
-    public function getTestPath(string $className): string
+    public function getTestPath(array $data): string
     {
+        $className = $data['name'] ?? 'Unknown';
         $testFile = str_replace('Service', 'ServiceTest', $className);
         $testFile = str_replace('Repository', 'RepositoryTest', $testFile);
         

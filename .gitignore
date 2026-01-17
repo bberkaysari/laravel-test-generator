@@ -2,6 +2,10 @@
 composer.lock
 .phpunit.cache/
 coverage/
+coverage-report/
+coverage.xml
+infection.log
+infection-summary.log
 .php-cs-fixer.cache
 .DS_Store
 *.swp
@@ -9,3 +13,4 @@ coverage/
 *~
 .idea/
 .vscode/
+.test-gen-cache/
