@@ -76,7 +76,7 @@ jobs:
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --memory-limit=512M --error-format=github
@@ -98,7 +98,7 @@ jobs:
           tools: composer:v2
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
 
       - name: Run tests with coverage
         run: ./vendor/bin/phpunit --coverage-clover=coverage.xml
