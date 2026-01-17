@@ -102,6 +102,7 @@ class CacheManager
     {
         // Check if source file still exists and hasn't changed
         if (isset($data['source_file']) && file_exists($data['source_file'])) {
+            clearstatcache(true, $data['source_file']); // Clear file stat cache
             $currentMtime = filemtime($data['source_file']);
             
             if ($currentMtime !== $data['source_mtime']) {
