@@ -55,9 +55,10 @@ class CacheManagerTest extends TestCase
         // Verify cache exists
         $this->assertEquals($data, $this->cache->get($key, $tempFile));
 
-        // Modify source file
+        // Modify source file with future timestamp
         sleep(1); // Ensure different mtime
         file_put_contents($tempFile, 'modified');
+        touch($tempFile, time() + 2); // Force mtime to be in the future
 
         // Cache should be invalidated
         $this->assertNull($this->cache->get($key, $tempFile));
