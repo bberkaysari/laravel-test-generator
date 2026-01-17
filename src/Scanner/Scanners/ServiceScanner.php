@@ -41,12 +41,10 @@ class ServiceScanner implements ScannerInterface
         $this->services = [];
         $this->repositories = [];
 
+        // Scan entire app directory for intelligent detection
         $paths = [
-            $this->projectPath . '/app/Services',
-            $this->projectPath . '/app/Repositories',
-            $this->projectPath . '/app/Domain',
-            $this->projectPath . '/src/Services',
-            $this->projectPath . '/src/Repositories',
+            $this->projectPath . '/app',
+            $this->projectPath . '/src',
         ];
 
         foreach ($paths as $path) {
@@ -55,7 +53,15 @@ class ServiceScanner implements ScannerInterface
             }
 
             $finder = new Finder();
-            $finder->files()->in($path)->name('*.php');
+            $finder->files()
+                ->in($path)
+                ->name('*.php')
+                ->notPath('Console')
+                ->notPath('Exceptions')
+                ->notPath('Providers')
+                ->notPath('Models')
+                ->notPath('Http/Middleware')
+                ->notPath('Http/Controllers');
 
             foreach ($finder as $file) {
                 $this->scanFile($file);

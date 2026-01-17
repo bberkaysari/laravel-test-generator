@@ -392,8 +392,9 @@ class ProjectAnalyzer
         }
         
         // Count services/repos
-        $serviceCount = ($services['statistics']['total_services'] ?? 0) + 
-                       ($services['statistics']['total_repositories'] ?? 0);
+        $servicesData = $services['statistics'] ?? [];
+        $serviceCount = ($servicesData['total_services'] ?? 0);
+        $repositoryCount = ($servicesData['total_repositories'] ?? 0);
         
         // Count events/jobs
         $eventCount = ($events['statistics']['total_events'] ?? 0) + 
@@ -406,13 +407,15 @@ class ProjectAnalyzer
             ($methodCount * 3) +       // ~3 tests per controller method
             (count($migrations) * 2) + // ~2 tests per migration
             ($serviceCount * 10) +     // ~10 tests per service (complex logic)
+            ($repositoryCount * 8) +   // ~8 tests per repository
             ($eventCount * 2);         // ~2 tests per event/listener/job
         
         return [
             'models' => count($models),
             'migrations' => count($migrations),
             'controllers' => count($controllers),
-            'services_repositories' => $serviceCount,
+            'services' => $serviceCount,
+            'repositories' => $repositoryCount,
             'events_listeners_jobs' => $eventCount,
             'middleware' => $middleware['statistics']['total_middleware'] ?? 0,
             'relationships' => $relationshipCount,

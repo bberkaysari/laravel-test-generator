@@ -65,10 +65,48 @@ class ServiceTestGenerator implements GeneratorInterface
     public function getTestPath(array $data): string
     {
         $className = $data['name'] ?? 'Unknown';
+        $namespace = $data['namespace'] ?? '';
         $testFile = str_replace('Service', 'ServiceTest', $className);
         $testFile = str_replace('Repository', 'RepositoryTest', $testFile);
         
+        // Extract sub-path from namespace
+        $subPath = $this->extractSubPathFromNamespace($namespace);
+        
+        if ($subPath) {
+            return $this->testDirectory . '/' . $subPath . '/' . $testFile . '.php';
+        }
+        
         return $this->testDirectory . '/Services/' . $testFile . '.php';
+    }
+    
+    /**
+     * Extract subdirectory path from namespace
+     * App\Services\User\UserService -> Services/User
+     * App\Http\Controllers\UserService -> Http/Controllers (if misplaced)
+     * App\Repositories\PostRepository -> Repositories
+     */
+    private function extractSubPathFromNamespace(string $namespace): string
+    {
+        // Remove App\ or similar prefix
+        $parts = explode('\\', $namespace);
+        
+        // Find base directory (Services, Repositories, or keep full path if misplaced)
+        $baseIndex = -1;
+        $baseDirs = ['Services', 'Repositories', 'Domain', 'Http'];
+        
+        foreach ($parts as $i => $part) {
+            if (in_array($part, $baseDirs)) {
+                $baseIndex = $i;
+                break;
+            }
+        }
+        
+        // Get everything from base directory onwards
+        if ($baseIndex !== -1) {
+            return implode('/', array_slice($parts, $baseIndex));
+        }
+        
+        return '';
     }
 
     private function generateTestClass(string $className, string $fqn, array $methods, array $dependencies): string

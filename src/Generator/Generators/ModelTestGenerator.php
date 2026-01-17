@@ -58,7 +58,44 @@ class ModelTestGenerator implements GeneratorInterface
     public function getTestPath(array $modelData): string
     {
         $modelName = $modelData['name'];
+        $namespace = $modelData['namespace'] ?? '';
+        
+        // Extract sub-path from namespace (e.g., App\Models\User\Profile -> User)
+        // This preserves directory structure in tests
+        $subPath = $this->extractSubPathFromNamespace($namespace);
+        
+        if ($subPath) {
+            return "tests/Unit/Models/{$subPath}/{$modelName}Test.php";
+        }
+        
         return "tests/Unit/Models/{$modelName}Test.php";
+    }
+    
+    /**
+     * Extract subdirectory path from namespace
+     * App\Models\User\Profile -> User
+     * App\Domain\Shop\Product -> Shop
+     */
+    private function extractSubPathFromNamespace(string $namespace): string
+    {
+        // Remove App\ or similar prefix
+        $parts = explode('\\', $namespace);
+        
+        // Find Models, Domain, or similar base directory
+        $baseIndex = -1;
+        foreach ($parts as $i => $part) {
+            if (in_array($part, ['Models', 'Domain', 'Entities'])) {
+                $baseIndex = $i;
+                break;
+            }
+        }
+        
+        // Get everything after base directory
+        if ($baseIndex !== -1 && isset($parts[$baseIndex + 1])) {
+            return implode('/', array_slice($parts, $baseIndex + 1));
+        }
+        
+        return '';
     }
 
     private function buildTestClass(array $modelData, array $tests): string

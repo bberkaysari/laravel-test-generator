@@ -376,11 +376,46 @@ class ControllerTestGenerator implements GeneratorInterface
     {
         $controller = $data;
         $controllerName = $controller['name'];
+        $namespace = $controller['namespace'] ?? '';
         $testName = str_replace('Controller', 'ControllerTest', $controllerName);
         $isApi = $controller['is_api'] ?? false;
         
-        $subDir = $isApi ? 'Feature/Api' : 'Feature';
+        // Extract sub-path from namespace (e.g., App\Http\Controllers\Admin\PostController -> Admin)
+        $subPath = $this->extractSubPathFromNamespace($namespace);
         
-        return "tests/{$subDir}/{$testName}.php";
+        $baseDir = $isApi ? 'Feature/Api' : 'Feature';
+        
+        if ($subPath) {
+            return "tests/{$baseDir}/{$subPath}/{$testName}.php";
+        }
+        
+        return "tests/{$baseDir}/{$testName}.php";
+    }
+    
+    /**
+     * Extract subdirectory path from namespace
+     * App\Http\Controllers\Admin\PostController -> Admin
+     * App\Controllers\Api\V1\UserController -> Api/V1
+     */
+    private function extractSubPathFromNamespace(string $namespace): string
+    {
+        // Remove App\ or similar prefix
+        $parts = explode('\\', $namespace);
+        
+        // Find Controllers base directory
+        $baseIndex = -1;
+        foreach ($parts as $i => $part) {
+            if ($part === 'Controllers') {
+                $baseIndex = $i;
+                break;
+            }
+        }
+        
+        // Get everything after Controllers directory
+        if ($baseIndex !== -1 && isset($parts[$baseIndex + 1])) {
+            return implode('/', array_slice($parts, $baseIndex + 1));
+        }
+        
+        return '';
     }
 }

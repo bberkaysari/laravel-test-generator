@@ -91,6 +91,8 @@ HELP
                 "Found {$stats['models']} models",
                 "Found {$stats['controllers']} controllers",
                 "Found {$stats['migrations']} migrations",
+                "Found {$stats['services']} services",
+                "Found {$stats['repositories']} repositories",
                 "Estimated {$stats['estimated_tests']} tests",
             ]);
             
@@ -104,6 +106,10 @@ HELP
             
             if (in_array($testType, ['controller', 'all'])) {
                 $generated += $this->generateControllerTests($results, $projectPath, $outputDir, $force, $io);
+            }
+            
+            if (in_array($testType, ['service', 'all'])) {
+                $generated += $this->generateServiceTests($results, $projectPath, $outputDir, $force, $io);
             }
             
             // Performance summary
@@ -208,6 +214,54 @@ HELP
             $isApi = $controller['is_api'] ?? false;
             $subDir = $isApi ? 'Feature/Api' : 'Feature';
             $testPath = "{$projectPath}/{$outputDir}/{$subDir}/{$testName}.php";
+            
+            if (!$force && file_exists($testPath)) {
+                $progressBar->setMessage("{$testName} already exists (use --force)");
+                $progressBar->advance();
+                continue;
+            }
+            
+            $this->ensureDirectory(dirname($testPath));
+            file_put_contents($testPath, $testCode);
+            
+            $generated++;
+            $progressBar->advance();
+        }
+        
+        $progressBar->finish();
+        $io->newLine(2);
+        
+        return $generated;
+    }
+    
+    private function generateServiceTests(array $results, string $projectPath, string $outputDir, bool $force, SymfonyStyle $io): int
+    {
+        $generator = new \Bberkaysari\LaravelTestGenerator\Generator\Generators\ServiceTestGenerator();
+        $generated = 0;
+        
+        $services = array_merge(
+            $results['services'] ?? [],
+            $results['repositories'] ?? []
+        );
+        
+        if (empty($services)) {
+            $io->note('No services or repositories found to generate tests for');
+            return 0;
+        }
+        
+        $progressBar = $io->createProgressBar(count($services));
+        $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% - %message%');
+        
+        foreach ($services as $service) {
+            $serviceName = $service['name'];
+            $testName = str_replace(['Service', 'Repository'], ['ServiceTest', 'RepositoryTest'], $serviceName);
+            $progressBar->setMessage("Generating {$testName}...");
+            
+            // Generate test code
+            $testCode = $generator->generate($service);
+            
+            // Get path (namespace-preserving)
+            $testPath = "{$projectPath}/{$outputDir}/Unit/" . $generator->getTestPath($service);
             
             if (!$force && file_exists($testPath)) {
                 $progressBar->setMessage("{$testName} already exists (use --force)");
