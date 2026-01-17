@@ -36,6 +36,9 @@
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^10.0|^11.0"
     },
+    "bin": [
+        "bin/generate-tests"
+    ],
     "autoload": {
         "psr-4": {
             "Bberkaysari\\LaravelTestGenerator\\": "src/"
