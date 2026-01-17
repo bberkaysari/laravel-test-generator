@@ -136,6 +136,7 @@ class ControllerScanner implements ScannerInterface
                     'http_method' => $this->guessHttpMethod($method->name->toString()),
                     'route_params' => [],
                     'has_validation' => false,
+                    'has_implementation' => $this->hasImplementation($method),
                 ];
                 
                 // Parse parameters
@@ -175,6 +176,31 @@ class ControllerScanner implements ScannerInterface
                 if ($method->isProtected()) return 'protected';
                 if ($method->isPrivate()) return 'private';
                 return 'public';
+            }
+            
+            private function hasImplementation(Node\Stmt\ClassMethod $method): bool
+            {
+                // Empty method has no statements or only returns null/empty
+                if (empty($method->stmts)) {
+                    return false;
+                }
+                
+                // Single comment-only methods
+                if (count($method->stmts) === 0) {
+                    return false;
+                }
+                
+                // Check if only return; or return null;
+                if (count($method->stmts) === 1) {
+                    $stmt = $method->stmts[0];
+                    if ($stmt instanceof Node\Stmt\Return_) {
+                        if ($stmt->expr === null) {
+                            return false; // just "return;"
+                        }
+                    }
+                }
+                
+                return true;
             }
             
             private function getType(Node $type): string

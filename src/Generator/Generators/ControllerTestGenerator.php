@@ -87,6 +87,7 @@ class ControllerTestGenerator implements GeneratorInterface
         $httpMethod = strtolower($method['http_method']);
         $hasValidation = $method['has_validation'] ?? false;
         $routeParams = $method['route_params'] ?? [];
+        $hasImplementation = $method['has_implementation'] ?? true; // Default to true for backward compatibility
         
         // Find actual route for this controller method
         $routeData = $this->findRouteForMethod($controller, $methodName);
@@ -97,9 +98,42 @@ class ControllerTestGenerator implements GeneratorInterface
         if ($routeData) {
             $code .= "     * Route: " . implode('|', $routeData['http_methods']) . " {$routeData['uri']}\n";
         }
+        
+        // Only warn about missing routes if we have a RouteAnalyzer and found no routes
+        if ($this->routeAnalyzer && !$routeData && $this->isResourceMethod($methodName)) {
+            $code .= "     * \n";
+            $code .= "     * WARNING: No route found for this controller method.\n";
+            $code .= "     * Please add a route in routes/web.php or routes/api.php\n";
+        }
+        
+        if (!$hasImplementation) {
+            $code .= "     * \n";
+            $code .= "     * WARNING: Controller method appears to be empty.\n";
+            $code .= "     * Please implement the method logic before running this test.\n";
+        }
         $code .= "     */\n";
         $code .= "    public function {$testName}(): void\n";
         $code .= "    {\n";
+        
+        // Add warning if routes were analyzed but not found (skip if RouteAnalyzer wasn't used)
+        if ($this->routeAnalyzer && !$routeData && $this->isResourceMethod($methodName)) {
+            $code .= "        // TODO: Add route definition for this controller method\n";
+            $code .= "        \$this->markTestIncomplete(\n";
+            $code .= "            'No route defined for {$controller}::{$methodName}. Add route first.'\n";
+            $code .= "        );\n";
+            $code .= "    }\n\n";
+            return $code;
+        }
+        
+        // Add warning if no implementation (always check this)
+        if (!$hasImplementation) {
+            $code .= "        // TODO: Implement the controller method first\n";
+            $code .= "        \$this->markTestIncomplete(\n";
+            $code .= "            '{$controller}::{$methodName} method is empty. Implement method first.'\n";
+            $code .= "        );\n";
+            $code .= "    }\n\n";
+            return $code;
+        }
         
         // Setup data if needed
         if ($routeData && !empty($routeData['parameters']) && $modelClass) {
@@ -135,7 +169,7 @@ class ControllerTestGenerator implements GeneratorInterface
         }
         
         // Assertions
-        $code .= $this->generateAssertions($methodName, $actualHttpMethod, $isApi);
+        $code .= $this->generateAssertions($methodName, $actualHttpMethod, $isApi, $modelClass);
         
         $code .= "    }\n\n";
         
@@ -257,7 +291,7 @@ class ControllerTestGenerator implements GeneratorInterface
         return $data;
     }
     
-    private function generateAssertions(string $methodName, string $httpMethod, bool $isApi): string
+    private function generateAssertions(string $methodName, string $httpMethod, bool $isApi, ?string $modelClass = null): string
     {
         $code = '';
         
@@ -275,15 +309,21 @@ class ControllerTestGenerator implements GeneratorInterface
             $code .= "        \$response->assertJsonStructure([]);\n";
         }
         
-        // Database assertions
-        if ($methodName === 'store') {
-            $code .= "        \$this->assertDatabaseHas('users', [\n";
-            $code .= "            'email' => 'test@example.com',\n";
-            $code .= "        ]);\n";
-        } elseif ($methodName === 'destroy') {
-            $code .= "        \$this->assertDatabaseMissing('users', [\n";
-            $code .= "            'id' => \$user->id,\n";
-            $code .= "        ]);\n";
+        // Database assertions - only if model is available
+        if ($modelClass) {
+            $tableName = $this->getTableName($modelClass);
+            $var = lcfirst($modelClass);
+            
+            if ($methodName === 'store') {
+                $code .= "        // TODO: Update assertions based on your model's fillable attributes\n";
+                $code .= "        \$this->assertDatabaseHas('{$tableName}', [\n";
+                $code .= "            // Add your assertions here\n";
+                $code .= "        ]);\n";
+            } elseif ($methodName === 'destroy') {
+                $code .= "        \$this->assertDatabaseMissing('{$tableName}', [\n";
+                $code .= "            'id' => \${$var}->id,\n";
+                $code .= "        ]);\n";
+            }
         }
         
         return $code;
@@ -351,6 +391,24 @@ class ControllerTestGenerator implements GeneratorInterface
         }
         
         return null;
+    }
+    
+    /**
+     * Convert model class name to table name
+     */
+    private function getTableName(string $modelClass): string
+    {
+        // Convert PascalCase to snake_case and pluralize
+        $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelClass));
+        return $this->pluralize($tableName);
+    }
+    
+    /**
+     * Check if method is a standard resource method
+     */
+    private function isResourceMethod(string $methodName): bool
+    {
+        return in_array($methodName, ['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
     }
     
     private function convertToSnakeCase(string $str): string

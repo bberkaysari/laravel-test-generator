@@ -22,9 +22,20 @@ class ModelTestGenerator implements GeneratorInterface
     public function generate(array $modelData): string
     {
         $tests = [];
+        
+        // Check if model is properly configured
+        $hasAnyTests = !empty($modelData['fillable']) || 
+                       !empty($modelData['hidden']) || 
+                       !empty($modelData['casts']) || 
+                       !empty($modelData['relations']);
 
         // Generate basic model tests
         $tests[] = $this->generateFactoryTest($modelData);
+        
+        // Add warning if model is empty/incomplete
+        if (!$hasAnyTests) {
+            $tests[] = $this->generateIncompleteModelWarning($modelData);
+        }
 
         // Generate fillable tests
         if (!empty($modelData['fillable'])) {
@@ -161,6 +172,31 @@ PHP;
         \$this->assertDatabaseHas('{$this->getTableName($modelName)}', [
             'id' => \$model->id,
         ]);
+    }
+PHP;
+    }
+    
+    private function generateIncompleteModelWarning(array $modelData): string
+    {
+        $modelName = $modelData['name'];
+
+        return <<<PHP
+    /**
+     * TODO: This model appears to be incomplete.
+     * 
+     * Please add the following to your model:
+     * - \$fillable array for mass assignment
+     * - \$hidden array for sensitive attributes  
+     * - \$casts array for attribute casting
+     * - Relationship methods (hasMany, belongsTo, etc.)
+     * 
+     * Once added, regenerate tests to get comprehensive coverage.
+     */
+    public function test_model_needs_configuration(): void
+    {
+        \$this->markTestIncomplete(
+            '{$modelName} model needs fillable, relations, and other configurations.'
+        );
     }
 PHP;
     }
