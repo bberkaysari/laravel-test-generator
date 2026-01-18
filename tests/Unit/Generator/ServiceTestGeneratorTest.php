@@ -135,7 +135,7 @@ class ServiceTestGeneratorTest extends TestCase
         $result = $this->generator->generate($service);
 
         $this->assertStringContainsString('test_process_data', $result);
-        $this->assertStringContainsString('with_empty_data', $result);
+        $this->assertStringContainsString('with_empty_array', $result);
     }
 
     public function test_it_generates_correct_assertions_for_return_types(): void
@@ -175,7 +175,7 @@ class ServiceTestGeneratorTest extends TestCase
         $result = $this->generator->generate($service);
 
         $this->assertStringContainsString('assertIsBool', $result);
-        $this->assertStringContainsString('assertIsNumeric', $result);
+        $this->assertStringContainsString('assertIsInt', $result);
         $this->assertStringContainsString('assertIsArray', $result);
         $this->assertStringContainsString('assertIsString', $result);
     }

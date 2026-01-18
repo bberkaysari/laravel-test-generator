@@ -423,17 +423,44 @@ class ControllerTestGenerator implements GeneratorInterface
     
     private function detectModelClass(array $methods): ?string
     {
+        // Types to skip - not models
+        $skipTypes = [
+            'Request', 'int', 'string', 'bool', 'array', 'float', 'mixed', 'object',
+            'callable', 'iterable', 'null', 'void', 'Collection', 'Carbon', 'DateTime',
+        ];
+
+        // Patterns that indicate non-model types
+        $skipPatterns = [
+            'Interface', 'Service', 'Repository', 'Contract', 'Handler', 'Factory',
+            'Provider', 'Manager', 'Helper', 'Validator', 'Exception', 'Event',
+            'Listener', 'Job', 'Mail', 'Notification', 'Policy', 'Rule', 'Middleware',
+        ];
+
         foreach ($methods as $method) {
             if (!empty($method['parameters'])) {
                 foreach ($method['parameters'] as $param) {
                     $type = $param['type'] ?? '';
-                    if ($type && !in_array($type, ['Request', 'int', 'string', 'bool', 'array'])) {
+
+                    if (!$type || in_array($type, $skipTypes)) {
+                        continue;
+                    }
+
+                    // Skip if type contains any skip pattern
+                    $isSkipPattern = false;
+                    foreach ($skipPatterns as $pattern) {
+                        if (str_contains($type, $pattern)) {
+                            $isSkipPattern = true;
+                            break;
+                        }
+                    }
+
+                    if (!$isSkipPattern) {
                         return $type;
                     }
                 }
             }
         }
-        
+
         return null;
     }
     

@@ -368,76 +368,39 @@ PHP;
     private function generateEdgeCaseTest(array $method, array $dependencies): string
     {
         $methodName = $method['name'];
-        $testName = 'test_' . $this->camelToSnake($methodName) . '_handles_null_input';
         $params = $method['parameters'] ?? [];
+        $returnType = $method['return_type'] ?? 'void';
 
-        // Only generate if method has nullable parameters
-        $hasNullable = false;
+        // Only generate edge case test if method has array parameters
+        $hasArrayParam = false;
         foreach ($params as $param) {
-            if (str_starts_with($param['type'] ?? '', '?')) {
-                $hasNullable = true;
+            $type = $param['type'] ?? 'mixed';
+            if ($type === 'array' || str_contains($type, '[]')) {
+                $hasArrayParam = true;
                 break;
             }
         }
 
-        if (!$hasNullable && !empty($params)) {
-            return $this->generateEmptyInputTest($method);
-        }
-
-        if (!$hasNullable) {
+        if (!$hasArrayParam) {
             return '';
         }
 
-        $paramSetup = [];
-        foreach ($params as $param) {
-            $name = $param['name'];
-            if (str_starts_with($param['type'] ?? '', '?')) {
-                $paramSetup[] = "        \${$name} = null;";
-            } else {
-                $paramSetup[] = "        \${$name} = " . $this->getDefaultValue($param['type'] ?? 'mixed') . ";";
-            }
-        }
-
-        $methodCall = $this->generateMethodCall($methodName, $params);
-
-        $code = <<<PHP
-    public function {$testName}(): void
-    {
-{$this->indent($paramSetup, 1)}
-
-        \$result = {$methodCall};
-
-        // Should handle null gracefully
-        \$this->assertTrue(true); // Placeholder assertion
-    }
-PHP;
-
-        return $code;
-    }
-
-    private function generateEmptyInputTest(array $method): string
-    {
-        $methodName = $method['name'];
-        $testName = 'test_' . $this->camelToSnake($methodName) . '_with_empty_data';
-        $params = $method['parameters'] ?? [];
-
-        if (empty($params)) {
-            return '';
-        }
+        $testName = 'test_' . $this->camelToSnake($methodName) . '_with_empty_array';
 
         $paramSetup = [];
         foreach ($params as $param) {
             $name = $param['name'];
             $type = $param['type'] ?? 'mixed';
-            
-            if ($type === 'array') {
+
+            if ($type === 'array' || str_contains($type, '[]')) {
                 $paramSetup[] = "        \${$name} = [];";
             } else {
-                $paramSetup[] = "        \${$name} = " . $this->getDefaultValue($type) . ";";
+                $paramSetup[] = "        \${$name} = " . $this->getDefaultValueForTest($type) . ";";
             }
         }
 
         $methodCall = $this->generateMethodCall($methodName, $params);
+        $assertions = $this->generateAssertions($returnType);
 
         $code = <<<PHP
     public function {$testName}(): void
@@ -446,12 +409,49 @@ PHP;
 
         \$result = {$methodCall};
 
-        // Should handle empty data gracefully
-        \$this->assertTrue(true); // Placeholder assertion
+{$assertions}
     }
 PHP;
 
         return $code;
+    }
+
+    /**
+     * Get default value for test parameters - handles object types with mocks
+     */
+    private function getDefaultValueForTest(string $type): string
+    {
+        $type = ltrim($type, '?');
+
+        // Primitive types
+        if ($this->isPrimitiveType($type)) {
+            return $this->getDefaultValue($type);
+        }
+
+        // Object types - create a mock or factory
+        if (str_contains($type, 'Model') || $this->looksLikeModel($type)) {
+            return "{$type}::factory()->create()";
+        }
+
+        // For interfaces/services, use Mockery
+        return "Mockery::mock({$type}::class)";
+    }
+
+    /**
+     * Check if type looks like an Eloquent model
+     */
+    private function looksLikeModel(string $type): bool
+    {
+        // Common model patterns
+        $modelPatterns = ['User', 'Post', 'Order', 'Product', 'Cart', 'Item', 'Payment', 'Address'];
+
+        foreach ($modelPatterns as $pattern) {
+            if (str_contains($type, $pattern) && !str_contains($type, 'Interface') && !str_contains($type, 'Repository') && !str_contains($type, 'Service')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function generateParameterSetup(array $params): string
@@ -464,8 +464,8 @@ PHP;
         foreach ($params as $param) {
             $name = $param['name'];
             $type = $param['type'] ?? 'mixed';
-            $default = $this->getDefaultValue($type);
-            
+            $default = $this->getDefaultValueForTest($type);
+
             $setup[] = "        \${$name} = {$default};";
         }
 
@@ -507,19 +507,26 @@ PHP;
 
     private function generateAssertions(string $returnType): string
     {
-        if ($returnType === 'void' || $returnType === null) {
-            return '        $this->assertTrue(true); // Method executed successfully';
+        $returnType = ltrim($returnType, '?');
+
+        if ($returnType === 'void' || $returnType === '') {
+            return '        // Void method - verify no exception was thrown
+        $this->addToAssertionCount(1);';
         }
 
         if ($returnType === 'bool') {
             return '        $this->assertIsBool($result);';
         }
 
-        if (in_array($returnType, ['int', 'float'])) {
-            return '        $this->assertIsNumeric($result);';
+        if (in_array($returnType, ['int', 'integer'])) {
+            return '        $this->assertIsInt($result);';
         }
 
-        if ($returnType === 'array') {
+        if (in_array($returnType, ['float', 'double'])) {
+            return '        $this->assertIsFloat($result);';
+        }
+
+        if ($returnType === 'array' || str_contains($returnType, '[]')) {
             return '        $this->assertIsArray($result);';
         }
 
@@ -527,7 +534,15 @@ PHP;
             return '        $this->assertIsString($result);';
         }
 
-        // Object type
+        if ($returnType === 'Collection' || str_contains($returnType, 'Collection')) {
+            return '        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $result);';
+        }
+
+        // Object type - check instance
+        if (!$this->isPrimitiveType($returnType)) {
+            return "        \$this->assertInstanceOf({$returnType}::class, \$result);";
+        }
+
         return '        $this->assertNotNull($result);';
     }
 
