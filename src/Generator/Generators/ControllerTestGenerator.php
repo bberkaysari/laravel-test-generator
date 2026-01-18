@@ -429,11 +429,12 @@ class ControllerTestGenerator implements GeneratorInterface
             'callable', 'iterable', 'null', 'void', 'Collection', 'Carbon', 'DateTime',
         ];
 
-        // Patterns that indicate non-model types
+        // Patterns that indicate non-model types (including FormRequest)
         $skipPatterns = [
             'Interface', 'Service', 'Repository', 'Contract', 'Handler', 'Factory',
             'Provider', 'Manager', 'Helper', 'Validator', 'Exception', 'Event',
             'Listener', 'Job', 'Mail', 'Notification', 'Policy', 'Rule', 'Middleware',
+            'Request', 'FormRequest',  // Skip all request types
         ];
 
         foreach ($methods as $method) {

@@ -111,13 +111,23 @@ class ServiceTestGenerator implements GeneratorInterface
     {
         $testClassName = $className . 'Test';
         $mockSetup = $this->generateMockSetup($dependencies);
-        $methodTests = $this->generateMethodTests($methods, $dependencies);
+
+        // Determine if this is a repository (needs RefreshDatabase)
+        $isRepository = str_contains($fqn, 'Repository');
+
+        // Collect model types used in methods for imports
+        $modelTypes = $this->collectModelTypesFromMethods($methods);
+
+        $methodTests = $this->generateMethodTests($methods, $dependencies, $isRepository);
 
         // Calculate dynamic namespace from FQN
         $testNamespace = $this->calculateTestNamespace($fqn);
 
         // Generate import statements for dependencies
-        $imports = $this->generateImports($fqn, $dependencies);
+        $imports = $this->generateImports($fqn, $dependencies, $isRepository, $modelTypes);
+
+        // Add RefreshDatabase trait usage if repository
+        $traitUsage = $isRepository ? "\n    use RefreshDatabase;\n" : '';
 
         $code = <<<PHP
 <?php
@@ -129,7 +139,7 @@ namespace {$testNamespace};
 {$imports}
 
 class {$testClassName} extends TestCase
-{
+{{$traitUsage}
     private {$className} \$service;
 {$this->generateMockProperties($dependencies)}
 
@@ -154,6 +164,32 @@ class {$testClassName} extends TestCase
 PHP;
 
         return $code;
+    }
+
+    /**
+     * Collect model types used in method parameters and return types
+     */
+    private function collectModelTypesFromMethods(array $methods): array
+    {
+        $modelTypes = [];
+
+        foreach ($methods as $method) {
+            // Check return type
+            $returnType = $method['return_type'] ?? '';
+            if ($returnType && $this->looksLikeModel($returnType)) {
+                $modelTypes[] = ltrim($returnType, '?');
+            }
+
+            // Check parameters
+            foreach ($method['parameters'] ?? [] as $param) {
+                $type = $param['type'] ?? '';
+                if ($type && $this->looksLikeModel($type)) {
+                    $modelTypes[] = ltrim($type, '?');
+                }
+            }
+        }
+
+        return array_unique($modelTypes);
     }
 
     /**
@@ -189,7 +225,7 @@ PHP;
     /**
      * Generate use/import statements
      */
-    private function generateImports(string $fqn, array $dependencies): string
+    private function generateImports(string $fqn, array $dependencies, bool $isRepository = false, array $modelTypes = []): string
     {
         $imports = [];
 
@@ -198,6 +234,11 @@ PHP;
         $imports[] = "use Tests\\TestCase;";
         $imports[] = "use Mockery;";
         $imports[] = "use Mockery\\MockInterface;";
+
+        // Add RefreshDatabase for repository tests
+        if ($isRepository) {
+            $imports[] = "use Illuminate\\Foundation\\Testing\\RefreshDatabase;";
+        }
 
         // Import dependency types (interfaces, classes)
         foreach ($dependencies as $dep) {
@@ -218,7 +259,15 @@ PHP;
             $depFqn = $dep['fqn'] ?? null;
             if ($depFqn) {
                 $imports[] = "use {$depFqn};";
+            } elseif (str_contains($type, 'Interface')) {
+                // Try to guess interface namespace
+                $imports[] = "use App\\Repositories\\Interfaces\\{$type};";
             }
+        }
+
+        // Import model types used in method signatures
+        foreach ($modelTypes as $modelType) {
+            $imports[] = "use App\\Models\\{$modelType};";
         }
 
         return implode("\n", array_unique($imports));
@@ -314,7 +363,7 @@ PHP;
         return implode(",\n", $args);
     }
 
-    private function generateMethodTests(array $methods, array $dependencies): string
+    private function generateMethodTests(array $methods, array $dependencies, bool $isRepository = false): string
     {
         $tests = [];
 
@@ -325,24 +374,29 @@ PHP;
             }
 
             $methodName = $method['name'];
-            $tests[] = $this->generateMethodTest($method, $dependencies);
-            
-            // Generate edge case tests
-            $tests[] = $this->generateEdgeCaseTest($method, $dependencies);
+            $tests[] = $this->generateMethodTest($method, $dependencies, $isRepository);
+
+            // Generate edge case tests only for non-repository (service) tests
+            if (!$isRepository) {
+                $edgeTest = $this->generateEdgeCaseTest($method, $dependencies);
+                if ($edgeTest) {
+                    $tests[] = $edgeTest;
+                }
+            }
         }
 
-        return implode("\n\n", $tests);
+        return implode("\n\n", array_filter($tests));
     }
 
-    private function generateMethodTest(array $method, array $dependencies): string
+    private function generateMethodTest(array $method, array $dependencies, bool $isRepository = false): string
     {
         $methodName = $method['name'];
         $testName = 'test_' . $this->camelToSnake($methodName);
         $params = $method['parameters'] ?? [];
         $returnType = $method['return_type'] ?? 'void';
 
-        // Generate parameter setup
-        $paramSetup = $this->generateParameterSetup($params);
+        // Generate parameter setup - use factory for repositories, mocks for services
+        $paramSetup = $this->generateParameterSetup($params, $isRepository);
         $methodCall = $this->generateMethodCall($methodName, $params);
 
         // Generate mock expectations
@@ -442,19 +496,45 @@ PHP;
      */
     private function looksLikeModel(string $type): bool
     {
-        // Common model patterns
-        $modelPatterns = ['User', 'Post', 'Order', 'Product', 'Cart', 'Item', 'Payment', 'Address'];
+        $type = ltrim($type, '?');
+
+        // Skip non-model patterns
+        $skipPatterns = [
+            'Interface', 'Repository', 'Service', 'Request', 'Contract',
+            'Handler', 'Factory', 'Provider', 'Manager', 'Helper', 'Validator',
+            'Exception', 'Event', 'Listener', 'Job', 'Mail', 'Notification',
+            'Policy', 'Rule', 'Middleware', 'Collection', 'Builder'
+        ];
+
+        foreach ($skipPatterns as $pattern) {
+            if (str_contains($type, $pattern)) {
+                return false;
+            }
+        }
+
+        // Check for common model patterns
+        $modelPatterns = [
+            'User', 'Post', 'Order', 'Product', 'Cart', 'Item', 'Payment',
+            'Address', 'Category', 'Tag', 'Comment', 'Image', 'File', 'Media',
+            'Variant', 'Batch', 'Row', 'Import', 'Export', 'Invoice', 'Customer',
+            'Subscription', 'Plan', 'Role', 'Permission', 'Setting', 'Config'
+        ];
 
         foreach ($modelPatterns as $pattern) {
-            if (str_contains($type, $pattern) && !str_contains($type, 'Interface') && !str_contains($type, 'Repository') && !str_contains($type, 'Service')) {
+            if (str_contains($type, $pattern)) {
                 return true;
             }
+        }
+
+        // If type is PascalCase and doesn't match skip patterns, likely a model
+        if (preg_match('/^[A-Z][a-z]+(?:[A-Z][a-z]+)*$/', $type)) {
+            return true;
         }
 
         return false;
     }
 
-    private function generateParameterSetup(array $params): string
+    private function generateParameterSetup(array $params, bool $isRepository = false): string
     {
         if (empty($params)) {
             return '        // No parameters needed';
@@ -464,9 +544,15 @@ PHP;
         foreach ($params as $param) {
             $name = $param['name'];
             $type = $param['type'] ?? 'mixed';
-            $default = $this->getDefaultValueForTest($type);
+            $cleanType = ltrim($type, '?');
 
-            $setup[] = "        \${$name} = {$default};";
+            // For repositories, use factory for models
+            if ($isRepository && $this->looksLikeModel($cleanType)) {
+                $setup[] = "        \${$name} = {$cleanType}::factory()->create();";
+            } else {
+                $default = $this->getDefaultValueForTest($type);
+                $setup[] = "        \${$name} = {$default};";
+            }
         }
 
         return implode("\n", $setup);
