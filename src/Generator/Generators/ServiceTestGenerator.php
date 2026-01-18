@@ -22,7 +22,6 @@ use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\QueryAnalyzer;
  */
 class ServiceTestGenerator implements GeneratorInterface
 {
-    private string $namespace = 'Tests\\Unit\\Services';
     private DependencyAnalyzer $depAnalyzer;
     private MethodAnalyzer $methodAnalyzer;
     private QueryAnalyzer $queryAnalyzer;
@@ -114,21 +113,23 @@ class ServiceTestGenerator implements GeneratorInterface
         $mockSetup = $this->generateMockSetup($dependencies);
         $methodTests = $this->generateMethodTests($methods, $dependencies);
 
+        // Calculate dynamic namespace from FQN
+        $testNamespace = $this->calculateTestNamespace($fqn);
+
+        // Generate import statements for dependencies
+        $imports = $this->generateImports($fqn, $dependencies);
+
         $code = <<<PHP
 <?php
 
 declare(strict_types=1);
 
-namespace {$this->namespace};
+namespace {$testNamespace};
 
-use {$fqn};
-use Tests\\TestCase;
-use Mockery;
-use Mockery\\MockInterface;
+{$imports}
 
 class {$testClassName} extends TestCase
 {
-
     private {$className} \$service;
 {$this->generateMockProperties($dependencies)}
 
@@ -155,6 +156,74 @@ PHP;
         return $code;
     }
 
+    /**
+     * Calculate test namespace from original FQN
+     * App\Services\User\UserService -> Tests\Unit\Services\User
+     * App\Repositories\PostRepository -> Tests\Unit\Repositories
+     */
+    private function calculateTestNamespace(string $fqn): string
+    {
+        $parts = explode('\\', $fqn);
+        array_pop($parts); // Remove class name
+
+        // Find the base directory index
+        $baseIndex = -1;
+        $baseDirs = ['Services', 'Repositories', 'Domain'];
+
+        foreach ($parts as $i => $part) {
+            if (in_array($part, $baseDirs)) {
+                $baseIndex = $i;
+                break;
+            }
+        }
+
+        if ($baseIndex !== -1) {
+            $relevantParts = array_slice($parts, $baseIndex);
+            return 'Tests\\Unit\\' . implode('\\', $relevantParts);
+        }
+
+        // Fallback
+        return 'Tests\\Unit\\Services';
+    }
+
+    /**
+     * Generate use/import statements
+     */
+    private function generateImports(string $fqn, array $dependencies): string
+    {
+        $imports = [];
+
+        // Always import the class being tested
+        $imports[] = "use {$fqn};";
+        $imports[] = "use Tests\\TestCase;";
+        $imports[] = "use Mockery;";
+        $imports[] = "use Mockery\\MockInterface;";
+
+        // Import dependency types (interfaces, classes)
+        foreach ($dependencies as $dep) {
+            $type = $dep['type'] ?? null;
+            if (!$type) {
+                continue;
+            }
+
+            // Clean nullable indicator
+            $type = ltrim($type, '?');
+
+            // Skip primitive types
+            if ($this->isPrimitiveType($type)) {
+                continue;
+            }
+
+            // Get full FQN if available
+            $depFqn = $dep['fqn'] ?? null;
+            if ($depFqn) {
+                $imports[] = "use {$depFqn};";
+            }
+        }
+
+        return implode("\n", array_unique($imports));
+    }
+
     private function generateMockProperties(array $dependencies): string
     {
         if (empty($dependencies)) {
@@ -165,6 +234,15 @@ PHP;
         foreach ($dependencies as $dep) {
             $type = $dep['type'] ?? 'mixed';
             $name = $dep['name'];
+
+            // Clean type
+            $cleanType = ltrim($type, '?');
+
+            // Skip primitive types - they don't need mock properties
+            if ($this->isPrimitiveType($cleanType)) {
+                continue;
+            }
+
             $properties[] = "    private MockInterface \${$name};";
         }
 
@@ -181,14 +259,37 @@ PHP;
         foreach ($dependencies as $dep) {
             $type = $dep['type'] ?? 'stdClass';
             $name = $dep['name'];
-            
+
             // Clean type (remove nullable ?)
             $type = ltrim($type, '?');
-            
+
+            // Skip primitive types - they can't be mocked
+            if ($this->isPrimitiveType($type)) {
+                continue;
+            }
+
             $setup[] = "        \$this->{$name} = Mockery::mock({$type}::class);";
         }
 
+        if (empty($setup)) {
+            return '        // No mockable dependencies';
+        }
+
         return implode("\n", $setup);
+    }
+
+    /**
+     * Check if type is a primitive PHP type that cannot be mocked
+     */
+    private function isPrimitiveType(string $type): bool
+    {
+        $primitives = [
+            'int', 'integer', 'float', 'double', 'string', 'bool', 'boolean',
+            'array', 'object', 'callable', 'iterable', 'mixed', 'null', 'void',
+            'never', 'true', 'false', 'resource', 'stdClass'
+        ];
+
+        return in_array(strtolower($type), $primitives);
     }
 
     private function generateConstructorArgs(array $dependencies): string
@@ -200,7 +301,14 @@ PHP;
         $args = [];
         foreach ($dependencies as $dep) {
             $name = $dep['name'];
-            $args[] = "            \$this->{$name}";
+            $type = ltrim($dep['type'] ?? 'mixed', '?');
+
+            // Use default value for primitive types, mock reference for objects
+            if ($this->isPrimitiveType($type)) {
+                $args[] = "            " . $this->getDefaultValue($type);
+            } else {
+                $args[] = "            \$this->{$name}";
+            }
         }
 
         return implode(",\n", $args);

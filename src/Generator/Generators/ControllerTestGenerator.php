@@ -39,10 +39,11 @@ class ControllerTestGenerator implements GeneratorInterface
         $code .= "namespace {$namespace};\n\n";
 
         $code .= "use Tests\TestCase;\n";
-        
+        $code .= "use App\\Models\\User;\n";
+
         // Detect model from route params
         $modelClass = $this->detectModelClass($methods);
-        if ($modelClass) {
+        if ($modelClass && $modelClass !== 'User') {
             $code .= "use App\\Models\\{$modelClass};\n";
         }
         
@@ -71,12 +72,12 @@ class ControllerTestGenerator implements GeneratorInterface
     private function generateSetup(string $modelClass): string
     {
         $var = lcfirst($modelClass);
-        
-        return "    protected function setUp(): void\n" .
+
+        return "    protected User \$user;\n\n" .
+               "    protected function setUp(): void\n" .
                "    {\n" .
                "        parent::setUp();\n" .
-               "        // Add authentication if needed\n" .
-               "        // \$this->actingAs({$modelClass}::factory()->create());\n" .
+               "        \$this->user = User::factory()->create();\n" .
                "    }\n\n";
     }
     
@@ -134,13 +135,16 @@ class ControllerTestGenerator implements GeneratorInterface
             return $code;
         }
         
+        // Add authentication
+        $code .= "        \$this->actingAs(\$this->user);\n\n";
+
         // Setup data if needed
         if ($routeData && !empty($routeData['parameters']) && $modelClass) {
             $var = lcfirst($modelClass);
-            $code .= "        \${$var} = {$modelClass}::factory()->create();\n\n";
+            $code .= "        \${$var} = {$modelClass}::factory()->create();\n";
         } elseif (!empty($routeParams) && $modelClass) {
             $var = lcfirst($modelClass);
-            $code .= "        \${$var} = {$modelClass}::factory()->create();\n\n";
+            $code .= "        \${$var} = {$modelClass}::factory()->create();\n";
         }
         
         // Prepare request data for validation tests
@@ -176,12 +180,17 @@ class ControllerTestGenerator implements GeneratorInterface
         if ($hasValidation) {
             $code .= $this->generateValidationTest($methodName, $actualHttpMethod, $route, $controller);
         }
-        
+
         // Add middleware test if route has middleware
         if ($routeData && !empty($routeData['middleware'])) {
-            $code .= $this->generateMiddlewareTest($methodName, $routeData, $route);
+            $code .= $this->generateMiddlewareTest($methodName, $routeData, $route, $isApi);
         }
-        
+
+        // Add 404 test for show/update/destroy methods
+        if ($modelClass && in_array($methodName, ['show', 'update', 'destroy', 'edit'])) {
+            $code .= $this->generateNotFoundTest($methodName, $actualHttpMethod, $route, $modelClass);
+        }
+
         return $code;
     }
     
@@ -348,31 +357,67 @@ class ControllerTestGenerator implements GeneratorInterface
     /**
      * Generate middleware test for route
      */
-    private function generateMiddlewareTest(string $methodName, array $routeData, string $route): string
+    private function generateMiddlewareTest(string $methodName, array $routeData, string $route, bool $isApi = false): string
     {
-        $testName = "test_" . $this->convertToSnakeCase($methodName) . "_middleware";
+        $testName = "test_" . $this->convertToSnakeCase($methodName) . "_requires_authentication";
         $middleware = $routeData['middleware'];
         $middlewareList = implode(', ', $middleware);
-        
+
         $code = "    /**\n";
-        $code .= "     * Test {$methodName} middleware: {$middlewareList}\n";
+        $code .= "     * Test {$methodName} requires authentication\n";
+        $code .= "     * Middleware: {$middlewareList}\n";
         $code .= "     */\n";
         $code .= "    public function {$testName}(): void\n";
         $code .= "    {\n";
-        
+
         // Check for auth middleware
-        if (in_array('auth', $middleware)) {
+        $hasAuth = in_array('auth', $middleware) || in_array('auth:sanctum', $middleware) || in_array('auth:api', $middleware);
+
+        if ($hasAuth) {
             $httpMethod = strtolower($routeData['http_methods'][0]);
+            $code .= "        // Test without authentication\n";
             $code .= "        \$response = \$this->{$httpMethod}({$route});\n\n";
-            $code .= "        \$response->assertStatus(302);\n";
-            $code .= "        \$response->assertRedirect('/login');\n";
+
+            if ($isApi || in_array('auth:sanctum', $middleware) || in_array('auth:api', $middleware)) {
+                $code .= "        \$response->assertStatus(401);\n";
+            } else {
+                $code .= "        \$response->assertStatus(302);\n";
+                $code .= "        \$response->assertRedirect('/login');\n";
+            }
         } else {
-            $code .= "        // Test middleware: {$middlewareList}\n";
+            $code .= "        // Middleware: {$middlewareList}\n";
             $code .= "        \$this->assertTrue(true);\n";
         }
-        
+
         $code .= "    }\n\n";
-        
+
+        return $code;
+    }
+
+    /**
+     * Generate test for 404 not found response
+     */
+    private function generateNotFoundTest(string $methodName, string $httpMethod, string $route, ?string $modelClass): string
+    {
+        if (!in_array($methodName, ['show', 'update', 'destroy', 'edit'])) {
+            return '';
+        }
+
+        $testName = "test_" . $this->convertToSnakeCase($methodName) . "_returns_404_for_invalid_id";
+
+        $code = "    /**\n";
+        $code .= "     * Test {$methodName} returns 404 for non-existent resource\n";
+        $code .= "     */\n";
+        $code .= "    public function {$testName}(): void\n";
+        $code .= "    {\n";
+        $code .= "        \$this->actingAs(\$this->user);\n\n";
+
+        // Replace model id with invalid id
+        $invalidRoute = preg_replace('/\$[a-zA-Z]+->id/', '99999', $route);
+        $code .= "        \$response = \$this->{$httpMethod}({$invalidRoute});\n\n";
+        $code .= "        \$response->assertStatus(404);\n";
+        $code .= "    }\n\n";
+
         return $code;
     }
     
