@@ -40,7 +40,6 @@ class ServiceTestGeneratorTest extends TestCase
         $this->assertStringContainsString('class UserServiceTest', $result);
         $this->assertStringContainsString('function test_create_user', $result);
         $this->assertStringContainsString('Tests\\TestCase', $result);
-        $this->assertStringContainsString('RefreshDatabase', $result);
     }
 
     public function test_it_generates_mock_setup_for_dependencies(): void

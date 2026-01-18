@@ -319,19 +319,4 @@ class ControllerTestGeneratorTest extends TestCase
 
         $this->assertStringContainsString('assertStatus(201)', $result);
     }
-
-    public function test_it_includes_refresh_database_trait(): void
-    {
-        $controller = [
-            'name' => 'UserController',
-            'is_resource' => true,
-            'is_api' => false,
-            'methods' => [],
-        ];
-
-        $result = $this->generator->generate($controller);
-
-        $this->assertStringContainsString('use RefreshDatabase;', $result);
-        $this->assertStringContainsString('Illuminate\Foundation\Testing\RefreshDatabase', $result);
-    }
 }

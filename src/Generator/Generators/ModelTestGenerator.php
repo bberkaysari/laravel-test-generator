@@ -127,8 +127,6 @@ namespace {$this->testNamespace};
 
 class {$modelName}Test extends TestCase
 {
-    use RefreshDatabase;
-
 {$testMethods}
 }
 PHP;
@@ -142,7 +140,6 @@ PHP;
         $uses = [
             "{$modelNamespace}\\{$modelName}",
             'Tests\\TestCase',
-            'Illuminate\\Foundation\\Testing\\RefreshDatabase',
         ];
 
         // Add related models for relation tests

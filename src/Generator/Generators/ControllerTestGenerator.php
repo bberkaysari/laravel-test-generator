@@ -37,7 +37,7 @@ class ControllerTestGenerator implements GeneratorInterface
         
         $code = "<?php\n\n";
         $code .= "namespace {$namespace};\n\n";
-        $code .= "use Illuminate\Foundation\Testing\RefreshDatabase;\n";
+
         $code .= "use Tests\TestCase;\n";
         
         // Detect model from route params
@@ -52,7 +52,6 @@ class ControllerTestGenerator implements GeneratorInterface
         $code .= " */\n";
         $code .= "class {$testClass} extends TestCase\n";
         $code .= "{\n";
-        $code .= "    use RefreshDatabase;\n\n";
         
         // Generate setup if needed
         if ($modelClass) {

@@ -23,7 +23,6 @@ class ModelTestGeneratorTest extends TestCase
 
         $this->assertStringContainsString('namespace Tests\Unit\Models;', $generatedCode);
         $this->assertStringContainsString('class UserTest extends TestCase', $generatedCode);
-        $this->assertStringContainsString('use RefreshDatabase;', $generatedCode);
     }
 
     public function test_it_generates_use_statements(): void
@@ -34,7 +33,6 @@ class ModelTestGeneratorTest extends TestCase
 
         $this->assertStringContainsString('use App\Models\User;', $generatedCode);
         $this->assertStringContainsString('use Tests\TestCase;', $generatedCode);
-        $this->assertStringContainsString('use Illuminate\Foundation\Testing\RefreshDatabase;', $generatedCode);
     }
 
     public function test_it_generates_factory_test(): void
