@@ -155,16 +155,12 @@ class TestGenerateCommand extends Command
         $generated = 0;
 
         $models = $results['models'] ?? [];
-        $migrations = $results['migrations'] ?? [];
 
         foreach ($models as $model) {
             $modelName = $model['name'];
 
-            // Find matching migration
-            $migration = $this->findMatchingMigration($model, $migrations);
-
             // Generate test code
-            $testCode = $generator->generate($model, $migration);
+            $testCode = $generator->generate($model);
 
             // Write to file
             $testPath = "{$projectPath}/{$outputDir}/Unit/{$modelName}Test.php";
@@ -259,27 +255,6 @@ class TestGenerateCommand extends Command
         }
 
         return $generated;
-    }
-
-    private function findMatchingMigration(array $model, array $migrations): ?array
-    {
-        $tableName = strtolower($this->pluralize($model['name']));
-
-        foreach ($migrations as $migration) {
-            if (($migration['table'] ?? '') === $tableName) {
-                return $migration;
-            }
-        }
-
-        return null;
-    }
-
-    private function pluralize(string $word): string
-    {
-        if (str_ends_with($word, 'y')) {
-            return substr($word, 0, -1) . 'ies';
-        }
-        return $word . 's';
     }
 
     private function ensureDirectory(string $path): void
