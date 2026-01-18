@@ -73,10 +73,12 @@ class ServiceTestGenerator implements GeneratorInterface
         $subPath = $this->extractSubPathFromNamespace($namespace);
         
         if ($subPath) {
-            return $this->testDirectory . '/' . $subPath . '/' . $testFile . '.php';
+            // Return relative path without tests/Unit prefix (Command adds it)
+            return $subPath . '/' . $testFile . '.php';
         }
         
-        return $this->testDirectory . '/Services/' . $testFile . '.php';
+        // Default to Services directory
+        return 'Services/' . $testFile . '.php';
     }
     
     /**
@@ -123,12 +125,15 @@ declare(strict_types=1);
 namespace {$this->namespace};
 
 use {$fqn};
-use PHPUnit\\Framework\\TestCase;
+use Tests\\TestCase;
+use Illuminate\\Foundation\\Testing\\RefreshDatabase;
 use Mockery;
 use Mockery\\MockInterface;
 
 class {$testClassName} extends TestCase
 {
+    use RefreshDatabase;
+
     private {$className} \$service;
 {$this->generateMockProperties($dependencies)}
 

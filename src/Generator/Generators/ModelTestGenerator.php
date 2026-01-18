@@ -252,11 +252,13 @@ PHP;
 
         foreach ($modelData['casts'] as $attribute => $castType) {
             $testName = $this->camelToSnake($attribute);
+            // Remove :precision from cast type for method name (e.g., decimal:2 -> decimal)
+            $cleanCastType = preg_replace('/:.+$/', '', $castType);
             $assertMethod = $this->getAssertMethodForCast($castType, $attribute);
 
             $tests[] = <<<PHP
     /** @test */
-    public function it_casts_{$testName}_to_{$castType}(): void
+    public function it_casts_{$testName}_to_{$cleanCastType}(): void
     {
         \$model = {$modelName}::factory()->create();
 

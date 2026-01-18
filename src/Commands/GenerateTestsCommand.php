@@ -98,6 +98,10 @@ HELP
             
             // Generate tests
             $io->section('Generating Tests');
+            
+            // Ensure base test files exist
+            $this->ensureBaseTestFiles($projectPath, $io);
+            
             $generated = 0;
             
             if (in_array($testType, ['model', 'all'])) {
@@ -314,5 +318,73 @@ HELP
         if (!is_dir($path)) {
             mkdir($path, 0755, true);
         }
+    }
+    
+    /**
+     * Ensure base test files (TestCase.php, CreatesApplication.php) exist
+     */
+    private function ensureBaseTestFiles(string $projectPath, SymfonyStyle $io): void
+    {
+        $testsDir = "{$projectPath}/tests";
+        
+        // Create TestCase.php if it doesn't exist
+        $testCasePath = "{$testsDir}/TestCase.php";
+        if (!file_exists($testCasePath)) {
+            $this->ensureDirectory($testsDir);
+            file_put_contents($testCasePath, $this->getTestCaseTemplate());
+            $io->text('<info>✓</info> Created tests/TestCase.php');
+        }
+        
+        // Create CreatesApplication.php if it doesn't exist
+        $createsAppPath = "{$testsDir}/CreatesApplication.php";
+        if (!file_exists($createsAppPath)) {
+            file_put_contents($createsAppPath, $this->getCreatesApplicationTemplate());
+            $io->text('<info>✓</info> Created tests/CreatesApplication.php');
+        }
+    }
+    
+    private function getTestCaseTemplate(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace Tests;
+
+use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+
+abstract class TestCase extends BaseTestCase
+{
+    use CreatesApplication;
+}
+
+PHP;
+    }
+    
+    private function getCreatesApplicationTemplate(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace Tests;
+
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Foundation\Application;
+
+trait CreatesApplication
+{
+    /**
+     * Creates the application.
+     */
+    public function createApplication(): Application
+    {
+        $app = require __DIR__.'/../bootstrap/app.php';
+
+        $app->make(Kernel::class)->bootstrap();
+
+        return $app;
+    }
+}
+
+PHP;
     }
 }
