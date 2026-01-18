@@ -318,7 +318,6 @@ class ControllerTestGeneratorTest extends TestCase
         $result = $this->generator->generate($controller);
 
         $this->assertStringContainsString('assertStatus(201)', $result);
-        $this->assertStringContainsString('use DatabaseMigrations;', $result);
-        $this->assertStringContainsString('Illuminate\\Foundation\\Testing\\DatabaseMigrations', $result);
+
     }
 }

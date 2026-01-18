@@ -123,13 +123,11 @@ namespace {$this->namespace};
 
 use {$fqn};
 use Tests\\TestCase;
-use Illuminate\\Foundation\\Testing\\DatabaseMigrations;
 use Mockery;
 use Mockery\\MockInterface;
 
 class {$testClassName} extends TestCase
 {
-    use DatabaseMigrations;
 
     private {$className} \$service;
 {$this->generateMockProperties($dependencies)}
