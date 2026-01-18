@@ -185,11 +185,6 @@ class ControllerScanner implements ScannerInterface
                     return false;
                 }
                 
-                // Single comment-only methods
-                if (count($method->stmts) === 0) {
-                    return false;
-                }
-                
                 // Check if only return; or return null;
                 if (count($method->stmts) === 1) {
                     $stmt = $method->stmts[0];

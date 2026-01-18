@@ -12,7 +12,7 @@ class ServiceTestGeneratorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->generator = new ServiceTestGenerator('/tmp/tests');
+        $this->generator = new ServiceTestGenerator();
     }
 
     public function test_it_generates_basic_service_test(): void

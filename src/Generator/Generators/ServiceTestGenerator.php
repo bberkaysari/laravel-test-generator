@@ -22,19 +22,16 @@ use Bberkaysari\LaravelTestGenerator\Analyzer\Analyzers\QueryAnalyzer;
  */
 class ServiceTestGenerator implements GeneratorInterface
 {
-    private string $testDirectory;
     private string $namespace = 'Tests\\Unit\\Services';
     private DependencyAnalyzer $depAnalyzer;
     private MethodAnalyzer $methodAnalyzer;
     private QueryAnalyzer $queryAnalyzer;
 
     public function __construct(
-        string $testDirectory = 'tests/Unit',
         ?DependencyAnalyzer $depAnalyzer = null,
         ?MethodAnalyzer $methodAnalyzer = null,
         ?QueryAnalyzer $queryAnalyzer = null
     ) {
-        $this->testDirectory = rtrim($testDirectory, '/');
         $this->depAnalyzer = $depAnalyzer ?? new DependencyAnalyzer();
         $this->methodAnalyzer = $methodAnalyzer ?? new MethodAnalyzer();
         $this->queryAnalyzer = $queryAnalyzer ?? new QueryAnalyzer();
