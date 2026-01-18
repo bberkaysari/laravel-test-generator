@@ -39,7 +39,8 @@ class ServiceTestGeneratorTest extends TestCase
 
         $this->assertStringContainsString('class UserServiceTest', $result);
         $this->assertStringContainsString('function test_create_user', $result);
-        $this->assertStringContainsString('PHPUnit\\Framework\\TestCase', $result);
+        $this->assertStringContainsString('Tests\\TestCase', $result);
+        $this->assertStringContainsString('RefreshDatabase', $result);
     }
 
     public function test_it_generates_mock_setup_for_dependencies(): void
@@ -204,7 +205,7 @@ class ServiceTestGeneratorTest extends TestCase
 
         $path = $this->generator->getTestPath($service);
 
-        $this->assertEquals('/tmp/tests/Services/UserServiceTest.php', $path);
+        $this->assertEquals('Services/UserServiceTest.php', $path);
     }
 
     public function test_it_generates_correct_test_path_for_repository(): void
@@ -215,7 +216,7 @@ class ServiceTestGeneratorTest extends TestCase
 
         $path = $this->generator->getTestPath($repository);
 
-        $this->assertEquals('/tmp/tests/Services/UserRepositoryTest.php', $path);
+        $this->assertEquals('Services/UserRepositoryTest.php', $path);
     }
 
     public function test_it_generates_multiple_mock_properties(): void
