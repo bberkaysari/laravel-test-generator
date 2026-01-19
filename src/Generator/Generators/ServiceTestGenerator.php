@@ -112,7 +112,7 @@ class ServiceTestGenerator implements GeneratorInterface
         $testClassName = $className . 'Test';
         $mockSetup = $this->generateMockSetup($dependencies);
 
-        // Determine if this is a repository (needs RefreshDatabase)
+        // Determine if this is a repository
         $isRepository = str_contains($fqn, 'Repository');
 
         // Collect model types used in methods for imports
@@ -126,8 +126,8 @@ class ServiceTestGenerator implements GeneratorInterface
         // Generate import statements for dependencies
         $imports = $this->generateImports($fqn, $dependencies, $isRepository, $modelTypes);
 
-        // Add RefreshDatabase trait usage if repository
-        $traitUsage = $isRepository ? "\n    use RefreshDatabase;\n" : '';
+        // No automatic RefreshDatabase trait - let users decide
+        $traitUsage = '';
 
         $code = <<<PHP
 <?php
@@ -235,10 +235,7 @@ PHP;
         $imports[] = "use Mockery;";
         $imports[] = "use Mockery\\MockInterface;";
 
-        // Add RefreshDatabase for repository tests
-        if ($isRepository) {
-            $imports[] = "use Illuminate\\Foundation\\Testing\\RefreshDatabase;";
-        }
+        // No automatic RefreshDatabase import - let users decide based on their needs
 
         // Import dependency types (interfaces, classes)
         foreach ($dependencies as $dep) {
