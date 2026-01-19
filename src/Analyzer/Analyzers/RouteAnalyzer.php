@@ -57,32 +57,38 @@ class RouteAnalyzer
         if (is_dir($routesDir)) {
             // Scan all PHP files in routes directory
             $files = glob($routesDir . '/*.php');
-            foreach ($files as $file) {
-                $basename = basename($file, '.php');
-                // Determine type from filename
-                if ($basename === 'web') {
-                    $type = 'web';
-                } elseif ($basename === 'api') {
-                    $type = 'api';
-                } elseif (str_contains($basename, 'api')) {
-                    $type = 'api';  // Files like mock-api.php, admin-api.php
-                } else {
-                    $type = $basename;
+            if ($files) {
+                sort($files); // Sort for consistent ordering
+                foreach ($files as $file) {
+                    $basename = basename($file, '.php');
+                    // Determine type from filename
+                    if ($basename === 'web') {
+                        $type = 'web';
+                    } elseif ($basename === 'api') {
+                        $type = 'api';
+                    } elseif (str_contains($basename, 'api')) {
+                        $type = 'api';  // Files like mock-api.php, admin-api.php
+                    } else {
+                        $type = $basename;
+                    }
+                    // Use basename as key to avoid overwriting
+                    $routeFiles[$basename] = ['file' => $file, 'type' => $type];
                 }
-                $routeFiles[$type] = $file;
             }
         }
 
         // Fallback to known files if directory scan didn't work
         if (empty($routeFiles)) {
             $routeFiles = [
-                'web' => $this->projectPath . '/routes/web.php',
-                'api' => $this->projectPath . '/routes/api.php',
-                'channels' => $this->projectPath . '/routes/channels.php',
+                'web' => ['file' => $this->projectPath . '/routes/web.php', 'type' => 'web'],
+                'api' => ['file' => $this->projectPath . '/routes/api.php', 'type' => 'api'],
+                'channels' => ['file' => $this->projectPath . '/routes/channels.php', 'type' => 'channels'],
             ];
         }
 
-        foreach ($routeFiles as $type => $file) {
+        foreach ($routeFiles as $basename => $info) {
+            $file = $info['file'];
+            $type = $info['type'];
             if (file_exists($file)) {
                 $this->parseRouteFile($file, $type);
             }

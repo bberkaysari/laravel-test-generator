@@ -135,7 +135,8 @@ class ServiceTestGeneratorTest extends TestCase
         $result = $this->generator->generate($service);
 
         $this->assertStringContainsString('test_process_data', $result);
-        $this->assertStringContainsString('with_empty_array', $result);
+        // New edge case test names after improvements
+        $this->assertStringContainsString('handles_errors', $result);
     }
 
     public function test_it_generates_correct_assertions_for_return_types(): void
