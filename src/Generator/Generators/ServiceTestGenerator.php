@@ -276,10 +276,19 @@ PHP;
         // Remove duplicates and sort
         $imports = array_unique($imports);
 
-        // Filter out invalid imports (double namespace)
+        // Filter out invalid imports (duplicate namespace segments)
         $imports = array_filter($imports, function($import) {
-            // Remove imports like "use App\Models\App\Models\File;"
-            return !preg_match('/use\s+[^;]*\\\\[^;]*\\\\[^;]*\\\\/', $import);
+            // Remove imports like "use App\Models\App\Models\File;" where a namespace segment repeats
+            // Extract the namespace from "use Namespace\Class;"
+            if (preg_match('/use\s+([^;]+);/', $import, $matches)) {
+                $namespace = $matches[1];
+                $parts = explode('\\', $namespace);
+
+                // Check for repeated segments (case-insensitive)
+                $lowerParts = array_map('strtolower', $parts);
+                return count($lowerParts) === count(array_unique($lowerParts));
+            }
+            return true;
         });
 
         return implode("\n", $imports);
