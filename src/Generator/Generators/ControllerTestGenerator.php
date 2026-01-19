@@ -59,8 +59,21 @@ class ControllerTestGenerator implements GeneratorInterface
             $code .= $this->generateSetup($modelClass);
         }
         
-        // Generate tests for each method
+        // Generate tests for each method (skip constructors and private methods)
         foreach ($methods as $method) {
+            $methodName = $method['name'] ?? '';
+
+            // Skip constructor - it's automatically tested when controller is instantiated
+            if ($methodName === '__construct') {
+                continue;
+            }
+
+            // Skip private/protected methods - they can't be tested via HTTP
+            $visibility = $method['visibility'] ?? 'public';
+            if ($visibility !== 'public') {
+                continue;
+            }
+
             $code .= $this->generateMethodTest($method, $className, $modelClass, $isApi);
         }
         

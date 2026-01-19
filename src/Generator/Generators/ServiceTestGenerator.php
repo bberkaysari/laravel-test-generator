@@ -264,10 +264,25 @@ PHP;
 
         // Import model types used in method signatures
         foreach ($modelTypes as $modelType) {
-            $imports[] = "use App\\Models\\{$modelType};";
+            // Skip if already has namespace
+            if (str_contains($modelType, '\\')) {
+                $imports[] = "use {$modelType};";
+            } else {
+                // Try to find model in common locations
+                $imports[] = "use App\\Models\\{$modelType};";
+            }
         }
 
-        return implode("\n", array_unique($imports));
+        // Remove duplicates and sort
+        $imports = array_unique($imports);
+
+        // Filter out invalid imports (double namespace)
+        $imports = array_filter($imports, function($import) {
+            // Remove imports like "use App\Models\App\Models\File;"
+            return !preg_match('/use\s+[^;]*\\\\[^;]*\\\\[^;]*\\\\/', $import);
+        });
+
+        return implode("\n", $imports);
     }
 
     private function generateMockProperties(array $dependencies): string
@@ -373,12 +388,19 @@ PHP;
             $methodName = $method['name'];
             $tests[] = $this->generateMethodTest($method, $dependencies, $isRepository);
 
-            // Generate edge case tests only for non-repository (service) tests
-            if (!$isRepository) {
-                $edgeTest = $this->generateEdgeCaseTest($method, $dependencies);
+            // Generate edge case tests for both repository and service tests
+            // Edge cases are important for catching bugs!
+            $edgeCaseTests = $this->generateEdgeCaseTests($method, $dependencies, $isRepository);
+            foreach ($edgeCaseTests as $edgeTest) {
                 if ($edgeTest) {
                     $tests[] = $edgeTest;
                 }
+            }
+
+            // Generate data provider test if method has simple parameters
+            $dataProviderTest = $this->generateDataProviderTest($method, $dependencies, $isRepository);
+            if ($dataProviderTest) {
+                $tests[] = $dataProviderTest;
             }
         }
 
@@ -402,7 +424,20 @@ PHP;
         // Generate assertions
         $assertions = $this->generateAssertions($returnType);
 
+        // Generate PHPDoc annotations
+        $testGroup = $isRepository ? 'repository' : 'service';
+        $annotations = <<<ANNOT
+    /**
+     * Test {$methodName} method
+     *
+     * @test
+     * @group {$testGroup}
+     * @group unit
+     */
+ANNOT;
+
         $code = <<<PHP
+{$annotations}
     public function {$testName}(): void
     {
 {$paramSetup}
@@ -416,55 +451,220 @@ PHP;
         return $code;
     }
 
-    private function generateEdgeCaseTest(array $method, array $dependencies): string
+    /**
+     * Generate multiple edge case tests for a method
+     * Returns an array of test code strings
+     */
+    private function generateEdgeCaseTests(array $method, array $dependencies, bool $isRepository): array
     {
         $methodName = $method['name'];
         $params = $method['parameters'] ?? [];
         $returnType = $method['return_type'] ?? 'void';
+        $tests = [];
 
-        // Only generate edge case test if method has array parameters
-        $hasArrayParam = false;
-        foreach ($params as $param) {
-            $type = $param['type'] ?? 'mixed';
-            if ($type === 'array' || str_contains($type, '[]')) {
-                $hasArrayParam = true;
-                break;
+        // Edge Case 1: Empty/null parameters
+        if (!empty($params)) {
+            $hasNullableOrArray = false;
+            foreach ($params as $param) {
+                $type = $param['type'] ?? '';
+                if (str_starts_with($type, '?') || $type === 'array' || str_contains($type, 'null')) {
+                    $hasNullableOrArray = true;
+                    break;
+                }
             }
-        }
 
-        if (!$hasArrayParam) {
-            return '';
-        }
+            if ($hasNullableOrArray) {
+                $testName = 'test_' . $this->camelToSnake($methodName) . '_with_null_or_empty_params';
+                $paramSetup = [];
+                foreach ($params as $param) {
+                    $name = $param['name'];
+                    $type = $param['type'] ?? 'mixed';
 
-        $testName = 'test_' . $this->camelToSnake($methodName) . '_with_empty_array';
+                    if (str_starts_with($type, '?')) {
+                        $paramSetup[] = "        \${$name} = null;";
+                    } elseif ($type === 'array') {
+                        $paramSetup[] = "        \${$name} = [];";
+                    } else {
+                        $paramSetup[] = "        \${$name} = " . $this->getDefaultValueForTest($type) . ";";
+                    }
+                }
 
-        $paramSetup = [];
-        foreach ($params as $param) {
-            $name = $param['name'];
-            $type = $param['type'] ?? 'mixed';
-
-            if ($type === 'array' || str_contains($type, '[]')) {
-                $paramSetup[] = "        \${$name} = [];";
-            } else {
-                $paramSetup[] = "        \${$name} = " . $this->getDefaultValueForTest($type) . ";";
-            }
-        }
-
-        $methodCall = $this->generateMethodCall($methodName, $params);
-        $assertions = $this->generateAssertions($returnType);
-
-        $code = <<<PHP
+                $methodCall = $this->generateMethodCall($methodName, $params);
+                $tests[] = <<<PHP
+    /**
+     * Edge case: Test {$methodName} with null/empty parameters
+     *
+     * @test
+     * @group edge-case
+     * @group unit
+     */
     public function {$testName}(): void
     {
 {$this->indent($paramSetup, 1)}
 
         \$result = {$methodCall};
 
-{$assertions}
+        // TODO: Add assertions for edge case behavior
+        // What should happen when parameters are null/empty?
+        \$this->assertNotNull(\$result);
+    }
+PHP;
+            }
+        }
+
+        // Edge Case 2: Invalid data scenarios (for Services/Repositories)
+        // Only add this as a TODO/template, user should implement based on business logic
+        $testName = 'test_' . $this->camelToSnake($methodName) . '_handles_errors';
+        $tests[] = <<<PHP
+    /**
+     * Edge case: Test {$methodName} error handling
+     * TODO: Implement based on your error scenarios
+     *
+     * @test
+     * @group error-handling
+     * @group unit
+     */
+    public function {$testName}(): void
+    {
+        \$this->markTestIncomplete(
+            'TODO: Test error scenarios for {$methodName} - Add mock expectations that throw exceptions or return error responses'
+        );
+
+        // Example for ServiceResponse:
+        // Configure mocks to return error response
+        // \$result = \$this->service->{$methodName}(...);
+        // \$this->assertFalse(\$result->success);
+        // \$this->assertNotNull(\$result->message);
+    }
+PHP;
+
+        return $tests;
+    }
+
+    /**
+     * Generate data provider test for methods with simple parameters
+     * Uses @dataProvider annotation for testing multiple scenarios
+     */
+    private function generateDataProviderTest(array $method, array $dependencies, bool $isRepository): string
+    {
+        $methodName = $method['name'];
+        $params = $method['parameters'] ?? [];
+        $returnType = $method['return_type'] ?? 'void';
+
+        // Only generate for methods with 1-3 simple parameters (int, string, bool)
+        if (empty($params) || count($params) > 3) {
+            return '';
+        }
+
+        $hasOnlySimpleParams = true;
+        foreach ($params as $param) {
+            $type = $param['type'] ?? 'mixed';
+            $cleanType = ltrim($type, '?');
+            if (!in_array($cleanType, ['int', 'integer', 'string', 'bool', 'boolean', 'float', 'double'])) {
+                $hasOnlySimpleParams = false;
+                break;
+            }
+        }
+
+        if (!$hasOnlySimpleParams) {
+            return '';
+        }
+
+        $testName = 'test_' . $this->camelToSnake($methodName) . '_with_various_inputs';
+        $providerName = $this->camelToSnake($methodName) . 'DataProvider';
+        $methodCall = $this->generateMethodCall($methodName, $params);
+        $paramList = implode(', ', array_map(fn($p) => '$' . $p['name'], $params));
+
+        $code = <<<PHP
+    /**
+     * Test {$methodName} with various input combinations
+     *
+     * @dataProvider {$providerName}
+     * @group parametrized
+     */
+    public function {$testName}({$this->generateDataProviderParams($params)}): void
+    {
+        // TODO: Configure mock expectations based on input data
+
+        \$result = {$methodCall};
+
+        // TODO: Add assertions based on expected behavior for each scenario
+        \$this->assertNotNull(\$result);
+    }
+
+    /**
+     * Data provider for {$methodName} test
+     *
+     * @return array<string, array>
+     */
+    public static function {$providerName}(): array
+    {
+        return [
+            'valid_input' => [{$this->generateSampleDataProviderValues($params, 'valid')}],
+            'edge_case_zeros' => [{$this->generateSampleDataProviderValues($params, 'zero')}],
+            'edge_case_negatives' => [{$this->generateSampleDataProviderValues($params, 'negative')}],
+            // TODO: Add more test scenarios based on your business logic
+        ];
     }
 PHP;
 
         return $code;
+    }
+
+    /**
+     * Generate parameter list for data provider test
+     */
+    private function generateDataProviderParams(array $params): string
+    {
+        $paramsList = [];
+        foreach ($params as $param) {
+            $type = $param['type'] ?? 'mixed';
+            $name = $param['name'];
+            $paramsList[] = "{$type} \${$name}";
+        }
+        return implode(', ', $paramsList);
+    }
+
+    /**
+     * Generate sample values for data provider scenarios
+     */
+    private function generateSampleDataProviderValues(array $params, string $scenario): string
+    {
+        $values = [];
+        foreach ($params as $param) {
+            $type = ltrim($param['type'] ?? 'mixed', '?');
+
+            if ($scenario === 'valid') {
+                if (in_array($type, ['int', 'integer'])) {
+                    $values[] = '1';
+                } elseif (in_array($type, ['string'])) {
+                    $values[] = "'test'";
+                } elseif (in_array($type, ['bool', 'boolean'])) {
+                    $values[] = 'true';
+                } elseif (in_array($type, ['float', 'double'])) {
+                    $values[] = '1.5';
+                }
+            } elseif ($scenario === 'zero') {
+                if (in_array($type, ['int', 'integer', 'float', 'double'])) {
+                    $values[] = '0';
+                } elseif (in_array($type, ['string'])) {
+                    $values[] = "''";
+                } elseif (in_array($type, ['bool', 'boolean'])) {
+                    $values[] = 'false';
+                }
+            } elseif ($scenario === 'negative') {
+                if (in_array($type, ['int', 'integer'])) {
+                    $values[] = '-1';
+                } elseif (in_array($type, ['float', 'double'])) {
+                    $values[] = '-1.5';
+                } elseif (in_array($type, ['string'])) {
+                    $values[] = "'invalid'";
+                } elseif (in_array($type, ['bool', 'boolean'])) {
+                    $values[] = 'false';
+                }
+            }
+        }
+        return implode(', ', $values);
     }
 
     /**
@@ -571,18 +771,44 @@ PHP;
             return '        // No mocks to configure';
         }
 
-        // Basic mock expectations
+        // Intelligent mock expectations based on dependency types
         $expectations = [];
+        $hasExpectations = false;
+
         foreach ($dependencies as $dep) {
             $name = $dep['name'];
-            // Example: Mock a repository method
-            if (str_contains($dep['type'] ?? '', 'Repository')) {
-                $expectations[] = "        \$this->{$name}->shouldReceive('find')->once()->andReturn(null);";
+            $type = $dep['type'] ?? '';
+
+            // Repository dependencies - common patterns
+            if (str_contains($type, 'Repository')) {
+                $expectations[] = "        // TODO: Configure {$name} mock expectations";
+                $expectations[] = "        // Example: \$this->{$name}->shouldReceive('find')->with(\$id)->once()->andReturn(\$mockData);";
+                $expectations[] = "        // Example: \$this->{$name}->shouldReceive('create')->once()->andReturn(\$model);";
+                $hasExpectations = true;
+            }
+            // Service dependencies
+            elseif (str_contains($type, 'Service')) {
+                $expectations[] = "        // TODO: Configure {$name} mock expectations";
+                $expectations[] = "        // Example: \$this->{$name}->shouldReceive('process')->once()->andReturn(new ServiceResponse(true, 'Success', []));";
+                $hasExpectations = true;
+            }
+            // API/Network dependencies
+            elseif (str_contains($type, 'Client') || str_contains($type, 'Http') || str_contains($type, 'Api')) {
+                $expectations[] = "        // TODO: Configure {$name} API mock expectations";
+                $expectations[] = "        // Example: \$this->{$name}->shouldReceive('get')->once()->andReturn(['status' => 200, 'data' => []]);";
+                $hasExpectations = true;
+            }
+            // Event/Queue dependencies
+            elseif (str_contains($type, 'Dispatcher') || str_contains($type, 'Queue')) {
+                $expectations[] = "        // TODO: Configure {$name} mock expectations";
+                $expectations[] = "        // Example: \$this->{$name}->shouldReceive('dispatch')->once();";
+                $hasExpectations = true;
             }
         }
 
-        if (empty($expectations)) {
-            return '        // No specific mock expectations needed';
+        if (!$hasExpectations) {
+            return "        // TODO: Configure mock expectations for method '{$methodName}'\n" .
+                   "        // Add shouldReceive() calls to define expected behavior of dependencies";
         }
 
         return implode("\n", $expectations);
@@ -597,36 +823,82 @@ PHP;
         $this->addToAssertionCount(1);';
         }
 
+        // Special handling for ServiceResponse
+        if ($returnType === 'ServiceResponse' || str_contains($returnType, 'ServiceResponse')) {
+            return <<<'ASSERTIONS'
+        $this->assertInstanceOf(ServiceResponse::class, $result);
+        // TODO: Add specific assertions based on your business logic
+        // $this->assertTrue($result->success);
+        // $this->assertNotNull($result->data);
+        // $this->assertIsArray($result->data);
+        // $this->assertEquals('Expected message', $result->message);
+ASSERTIONS;
+        }
+
         if ($returnType === 'bool') {
-            return '        $this->assertIsBool($result);';
+            return <<<'ASSERTIONS'
+        $this->assertIsBool($result);
+        // TODO: Verify the expected boolean value
+        // $this->assertTrue($result);
+        // or $this->assertFalse($result);
+ASSERTIONS;
         }
 
         if (in_array($returnType, ['int', 'integer'])) {
-            return '        $this->assertIsInt($result);';
+            return <<<'ASSERTIONS'
+        $this->assertIsInt($result);
+        // TODO: Verify the expected integer value
+        // $this->assertEquals(expectedValue, $result);
+        // $this->assertGreaterThan(0, $result);
+ASSERTIONS;
         }
 
         if (in_array($returnType, ['float', 'double'])) {
-            return '        $this->assertIsFloat($result);';
+            return <<<'ASSERTIONS'
+        $this->assertIsFloat($result);
+        // TODO: Verify the expected float value
+        // $this->assertEquals(expectedValue, $result, '', 0.001);
+ASSERTIONS;
         }
 
         if ($returnType === 'array' || str_contains($returnType, '[]')) {
-            return '        $this->assertIsArray($result);';
+            return <<<'ASSERTIONS'
+        $this->assertIsArray($result);
+        // TODO: Verify array contents
+        // $this->assertNotEmpty($result);
+        // $this->assertArrayHasKey('key', $result);
+        // $this->assertCount(expectedCount, $result);
+ASSERTIONS;
         }
 
         if ($returnType === 'string') {
-            return '        $this->assertIsString($result);';
+            return <<<'ASSERTIONS'
+        $this->assertIsString($result);
+        // TODO: Verify string contents
+        // $this->assertNotEmpty($result);
+        // $this->assertEquals('expected', $result);
+        // $this->assertStringContainsString('substring', $result);
+ASSERTIONS;
         }
 
         if ($returnType === 'Collection' || str_contains($returnType, 'Collection')) {
-            return '        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $result);';
+            return <<<'ASSERTIONS'
+        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $result);
+        // TODO: Verify collection contents
+        // $this->assertCount(expectedCount, $result);
+        // $this->assertTrue($result->isNotEmpty());
+ASSERTIONS;
         }
 
         // Object type - check instance
         if (!$this->isPrimitiveType($returnType)) {
-            return "        \$this->assertInstanceOf({$returnType}::class, \$result);";
+            return "        \$this->assertInstanceOf({$returnType}::class, \$result);\n" .
+                   "        // TODO: Verify object properties and state\n" .
+                   "        // \$this->assertEquals(expectedValue, \$result->property);";
         }
 
-        return '        $this->assertNotNull($result);';
+        return '        $this->assertNotNull($result);\n' .
+               '        // TODO: Add specific assertions for this return type';
     }
 
     private function getDefaultValue(string $type): string

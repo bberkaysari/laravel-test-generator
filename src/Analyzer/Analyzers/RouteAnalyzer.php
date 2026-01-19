@@ -50,12 +50,37 @@ class RouteAnalyzer
         $this->routeGroups = [];
         $this->controllerMethodMap = [];
 
-        // Parse route files
-        $routeFiles = [
-            'web' => $this->projectPath . '/routes/web.php',
-            'api' => $this->projectPath . '/routes/api.php',
-            'channels' => $this->projectPath . '/routes/channels.php',
-        ];
+        // Parse route files - scan routes directory for all PHP files
+        $routesDir = $this->projectPath . '/routes';
+        $routeFiles = [];
+
+        if (is_dir($routesDir)) {
+            // Scan all PHP files in routes directory
+            $files = glob($routesDir . '/*.php');
+            foreach ($files as $file) {
+                $basename = basename($file, '.php');
+                // Determine type from filename
+                if ($basename === 'web') {
+                    $type = 'web';
+                } elseif ($basename === 'api') {
+                    $type = 'api';
+                } elseif (str_contains($basename, 'api')) {
+                    $type = 'api';  // Files like mock-api.php, admin-api.php
+                } else {
+                    $type = $basename;
+                }
+                $routeFiles[$type] = $file;
+            }
+        }
+
+        // Fallback to known files if directory scan didn't work
+        if (empty($routeFiles)) {
+            $routeFiles = [
+                'web' => $this->projectPath . '/routes/web.php',
+                'api' => $this->projectPath . '/routes/api.php',
+                'channels' => $this->projectPath . '/routes/channels.php',
+            ];
+        }
 
         foreach ($routeFiles as $type => $file) {
             if (file_exists($file)) {

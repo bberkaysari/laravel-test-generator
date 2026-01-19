@@ -45,6 +45,7 @@ class ServiceScanner implements ScannerInterface
         $paths = [
             $this->projectPath . '/app',
             $this->projectPath . '/src',
+            $this->projectPath . '/Modules',
         ];
 
         foreach ($paths as $path) {
