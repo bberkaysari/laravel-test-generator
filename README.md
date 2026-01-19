@@ -11,11 +11,27 @@
 
 Generate comprehensive PHPUnit tests for your Laravel application through **static code analysis** - no AI, no guessing, just reliable test generation from your actual code.
 
+## 🆕 What's New in Latest Version
+
+### 🎯 Professional Test Quality (NEW!)
+- 🚀 **4-5 tests per method** (previously 1) - Happy path, edge cases, error handling
+- 📋 **PHPUnit Annotations** - @test, @group (service, repository, edge-case, error-handling)
+- 🎲 **Data Provider Support** - Multiple scenario testing with @dataProvider
+- 💡 **Smart Assertion Guides** - Type-specific TODO comments with examples
+- 🎭 **Mock Expectation Examples** - Repository, Service, API patterns
+
+### 🔧 Enhanced Scanner Capabilities (NEW!)
+- 📁 **Laravel Modules Support** - Automatically scans /Modules directory
+- 🛣️ **Custom Route Files** - Supports mock-api.php, admin-api.php, etc.
+- 🎯 **Smart Method Detection** - Skips constructors and private methods
+- 🔍 **Improved Import Management** - No more duplicate namespaces
+
 ## ✨ Features
 
 ### 🎯 Core Capabilities
 - ✅ **Model Tests**: Fillable validation, casts, relationships, scopes
-- ✅ **Controller Tests**: HTTP methods, validation rules, route parameters  
+- ✅ **Controller Tests**: HTTP methods, validation rules, route parameters
+- ✅ **Service/Repository Tests**: Mock setup, edge cases, error handling (NEW!)
 - ✅ **Migration Tests**: Schema validation, indexes, foreign keys
 - ✅ **85-90% Automation**: Comprehensive test coverage without manual work
 
@@ -24,12 +40,14 @@ Generate comprehensive PHPUnit tests for your Laravel application through **stat
 - 📊 **Performance Monitoring**: Track analysis metrics for large projects
 - 📈 **Progress Tracking**: Visual progress bars for bulk operations
 - 🏢 **1000+ Models**: Designed for enterprise-scale Laravel applications
+- 🔗 **Laravel Modules**: Full support for modular Laravel projects (NEW!)
 
 ### 🔍 Advanced Analysis
 - 🔬 **Static Code Analysis**: PHP-Parser based AST parsing
 - 🎯 **Resource Detection**: Automatically identifies RESTful patterns
 - ✔️ **Validation Detection**: Finds `$request->validate()` calls
 - 🔗 **Relationship Mapping**: Detects all Eloquent relationships
+- 📁 **Multi-Directory Scanning**: app/, src/, Modules/ (NEW!)
 
 ## 📦 Installation
 
@@ -56,6 +74,11 @@ php vendor/bin/generate-tests --type=model
 php vendor/bin/generate-tests --type=controller
 ```
 
+**Generate service/repository tests:**
+```bash
+php vendor/bin/generate-tests --type=service
+```
+
 **Custom options:**
 ```bash
 php vendor/bin/generate-tests \
@@ -63,6 +86,38 @@ php vendor/bin/generate-tests \
   --output=tests \
   --force \
   --no-cache
+```
+
+### Running Generated Tests with Groups (NEW!)
+
+**Run all tests:**
+```bash
+vendor/bin/phpunit
+```
+
+**Run only service tests:**
+```bash
+vendor/bin/phpunit --group service
+```
+
+**Run only repository tests:**
+```bash
+vendor/bin/phpunit --group repository
+```
+
+**Run edge case tests:**
+```bash
+vendor/bin/phpunit --group edge-case
+```
+
+**Exclude incomplete tests:**
+```bash
+vendor/bin/phpunit --exclude-group error-handling
+```
+
+**Run parametrized tests:**
+```bash
+vendor/bin/phpunit --group parametrized
 ```
 
 ### Programmatic Usage
